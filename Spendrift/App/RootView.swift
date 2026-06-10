@@ -77,9 +77,18 @@ struct RootView: View {
     }
 
     /// iPad: sidebar + detail with richer section list.
+    /// iOS List selection requires an optional binding (the non-optional
+    /// overload is macOS-only); ignore deselection so a row is always active.
+    private var sidebarSelection: Binding<AppSection?> {
+        Binding(
+            get: { selection },
+            set: { if let newValue = $0 { selection = newValue } }
+        )
+    }
+
     private var sidebarLayout: some View {
         NavigationSplitView {
-            List(AppSection.padSidebar, selection: $selection) { section in
+            List(AppSection.padSidebar, selection: sidebarSelection) { section in
                 Label(section.title, systemImage: section.systemImage)
                     .tag(section)
             }

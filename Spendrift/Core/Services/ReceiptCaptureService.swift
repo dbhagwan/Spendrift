@@ -97,7 +97,10 @@ struct ReceiptScannerView: UIViewControllerRepresentable {
         Coordinator(onScan: onScan, onCancel: onCancel)
     }
 
-    final class Coordinator: NSObject, VNDocumentCameraViewControllerDelegate {
+    // VisionKit calls these on the main thread; the protocol itself isn't
+    // MainActor-annotated, hence the @preconcurrency conformance.
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency VNDocumentCameraViewControllerDelegate {
         let onScan: ([UIImage]) -> Void
         let onCancel: () -> Void
 
