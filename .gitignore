@@ -1,0 +1,19 @@
+# Xcode
+*.xcodeproj/
+!project.yml
+xcuserdata/
+DerivedData/
+*.xcresult
+.build/
+.swiftpm/
+
+# Node / backend
+Backend/node_modules/
+Backend/dist/
+Backend/.env
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/

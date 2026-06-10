@@ -1,0 +1,67 @@
+name: Spendrift
+options:
+  bundleIdPrefix: com.spendrift
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    # TODO: Set your development team before building on device.
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Spendrift:
+    type: application
+    platform: iOS
+    sources:
+      - Spendrift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.spendrift.app
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: true
+    entitlements:
+      path: Spendrift/Spendrift.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
+        com.apple.security.application-groups:
+          - group.com.spendrift.shared
+    dependencies:
+      - target: SpendriftWidgets
+        embed: true
+      # TODO: Add the Plaid Link iOS SDK via SPM once backend is configured:
+      # https://github.com/plaid/plaid-link-ios
+
+  SpendriftWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - SpendriftWidgets
+      # Widgets share domain models, the design system, and the snapshot store.
+      - path: Spendrift/Core/Models
+      - path: Spendrift/Core/Utilities
+      - path: Spendrift/Core/Persistence/SharedSnapshotStore.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.spendrift.app.widgets
+        INFOPLIST_KEY_CFBundleDisplayName: Spendrift Widgets
+        INFOPLIST_KEY_NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    info:
+      path: SpendriftWidgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: SpendriftWidgets/SpendriftWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.spendrift.shared
