@@ -47,7 +47,10 @@ enum ReceiptParser {
 
     // MARK: - Helpers
 
-    private static let amountRegex = try? NSRegularExpression(pattern: #"\$?\s?(\d{1,5}\.\d{2})"#)
+    // Computed because NSRegularExpression is not Sendable (Swift 6 strict concurrency).
+    private static var amountRegex: NSRegularExpression? {
+        try? NSRegularExpression(pattern: #"\$?\s?(\d{1,5}\.\d{2})"#)
+    }
 
     private static func amounts(in line: String) -> [Decimal] {
         guard let amountRegex else { return [] }

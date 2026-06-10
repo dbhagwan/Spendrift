@@ -2,7 +2,8 @@ import Foundation
 import SwiftData
 
 enum ModelContainerFactory {
-    static let schema = Schema([
+    // Computed because Schema is not Sendable (Swift 6 strict concurrency).
+    static var schema: Schema { Schema([
         UserProfile.self,
         LinkedInstitution.self,
         Account.self,
@@ -11,7 +12,7 @@ enum ModelContainerFactory {
         Budget.self,
         BudgetCategory.self,
         NetWorthSnapshot.self,
-    ])
+    ]) }
 
     static func make(inMemory: Bool = false) -> ModelContainer {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
