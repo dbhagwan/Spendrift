@@ -100,6 +100,18 @@ jobs:
                       for item in node:
                           walk(item)
               walk(data)
+          # Keep only PNG screenshots, with artifact-safe filenames (the
+          # uploader rejects quotes and other special characters).
+          import re
+          for name in os.listdir("screenshots"):
+              path = os.path.join("screenshots", name)
+              if not name.lower().endswith(".png") or os.path.isdir(path):
+                  if os.path.isfile(path):
+                      os.remove(path)
+                  continue
+              safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+              if safe != name:
+                  shutil.move(path, os.path.join("screenshots", safe))
           print(sorted(os.listdir("screenshots")))
           EOF
           fi

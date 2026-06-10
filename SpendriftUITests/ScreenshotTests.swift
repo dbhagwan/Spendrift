@@ -68,7 +68,7 @@ final class ScreenshotTests: XCTestCase {
         // ── Tabs ────────────────────────────────────────────────────
         captureTab("Transactions", screenshot: "09-transactions")
         captureTab("Receipts", screenshot: "10-receipts")
-        captureTab("Profile", screenshot: "11-spending-profile")
+        captureTab("Spending Profile", screenshot: "11-spending-profile")
         captureTab("Budget", screenshot: "12-budget")
         captureTab("Accounts", screenshot: "13-accounts")
     }
