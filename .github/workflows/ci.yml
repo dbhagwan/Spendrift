@@ -52,26 +52,56 @@ jobs:
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           xcrun simctl list devices available | grep iPhone
 
-      - name: Build app + widget extension
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project Spendrift.xcodeproj \
-            -scheme Spendrift \
-            -destination "id=${{ steps.sim.outputs.udid }}" \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
-
-      - name: Launch in simulator and capture screenshot
+      - name: Prepare simulator (clean status bar)
         run: |
           UDID="${{ steps.sim.outputs.udid }}"
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/Spendrift.app
-          xcrun simctl launch "$UDID" com.spendrift.app
-          sleep 15
+          xcrun simctl status_bar "$UDID" override \
+            --time "9:41" --batteryLevel 100 --batteryState charged \
+            --cellularBars 4 --wifiBars 3 --operatorName "" || true
+
+      - name: Build and run UI screenshot tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Spendrift.xcodeproj \
+            -scheme Spendrift \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+
+      - name: Export screenshots from test results
+        if: always()
+        run: |
           mkdir -p screenshots
-          xcrun simctl io "$UDID" screenshot screenshots/01-launch.png
+          if [ -d TestResults.xcresult ]; then
+            xcrun xcresulttool export attachments \
+              --path TestResults.xcresult \
+              --output-path screenshots || true
+            # Rename exported files to their attachment names using the manifest.
+            python3 - <<'EOF'
+          import json, os, shutil
+          manifest_path = "screenshots/manifest.json"
+          if os.path.exists(manifest_path):
+              data = json.load(open(manifest_path))
+              def walk(node):
+                  if isinstance(node, dict):
+                      exported, human = node.get("exportedFileName"), node.get("suggestedHumanReadableName")
+                      if exported and human:
+                          src = os.path.join("screenshots", exported)
+                          if os.path.exists(src):
+                              dst = os.path.join("screenshots", human if human.endswith(".png") else human + ".png")
+                              shutil.move(src, dst)
+                      for value in node.values():
+                          walk(value)
+                  elif isinstance(node, list):
+                      for item in node:
+                          walk(item)
+              walk(data)
+          print(sorted(os.listdir("screenshots")))
+          EOF
 
       - name: Upload screenshots
         if: always()

@@ -71,3 +71,27 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.spendrift.shared
+
+  SpendriftUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - SpendriftUITests
+    dependencies:
+      - target: Spendrift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.spendrift.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  Spendrift:
+    build:
+      targets:
+        Spendrift: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SpendriftUITests
