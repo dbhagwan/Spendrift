@@ -115,7 +115,7 @@ struct ReceiptDetailView: View {
                 // Candidates: spend within ±7 days of the receipt.
                 let receiptDate = receipt.purchaseDate ?? receipt.capturedAt
                 let candidates = transactions.filter {
-                    $0.amount > 0 && abs($0.date.timeIntervalSince(receiptDate)) < 86_400 * 7
+                    $0.amount > 0 && abs($0.date.timeIntervalSince(receiptDate)) < 86_400.0 * 7
                 }
                 ForEach(candidates) { transaction in
                     Button {

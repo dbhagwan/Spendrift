@@ -44,8 +44,8 @@ enum SharedSnapshotStore {
             netWorth: 84_320,
             netWorthChange30Days: 1240,
             upcomingBills: [
-                .init(merchant: "Rent", amount: 1850, dueDate: .now.addingTimeInterval(86_400 * 3)),
-                .init(merchant: "Netflix", amount: 15.49, dueDate: .now.addingTimeInterval(86_400 * 5)),
+                .init(merchant: "Rent", amount: 1850, dueDate: .now.addingTimeInterval(86_400.0 * 3)),
+                .init(merchant: "Netflix", amount: 15.49, dueDate: .now.addingTimeInterval(86_400.0 * 5)),
             ],
             topAlert: .init(
                 title: "Dining pace +27%",

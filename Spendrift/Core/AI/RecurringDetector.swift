@@ -71,7 +71,7 @@ enum RecurringDetector {
             where a.id != b.id
                 && a.accountID != b.accountID
                 && a.amount == -b.amount
-                && abs(a.date.timeIntervalSince(b.date)) <= 86_400 * 3
+                && abs(a.date.timeIntervalSince(b.date)) <= 86_400.0 * 3
                 && a.amount > 0
             {
                 flagged.insert(a.id)
@@ -89,7 +89,7 @@ enum RecurringDetector {
             if let twin = posted.first(where: {
                 $0.accountID == pending.accountID
                     && $0.amount == pending.amount
-                    && abs($0.date.timeIntervalSince(pending.date)) <= 86_400 * 5
+                    && abs($0.date.timeIntervalSince(pending.date)) <= 86_400.0 * 5
             }) {
                 pending.supersededByProviderID = twin.providerTransactionID
             }
