@@ -76,6 +76,9 @@ struct RootView: View {
                     .tag(section)
             }
         }
+        // Liquid Glass tab bar tucks away while scrolling content, floating
+        // back on the lightest upward gesture.
+        .tabBarMinimizeBehavior(.onScrollDown)
     }
 
     /// iPad: sidebar + detail with richer section list.

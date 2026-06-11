@@ -11,8 +11,10 @@ struct HomeView: View {
     @Query(sort: \NetWorthSnapshot.date, order: .reverse) private var netWorthSnapshots: [NetWorthSnapshot]
     @Query private var accounts: [Account]
     @Query(sort: \Receipt.capturedAt, order: .reverse) private var receipts: [Receipt]
+    @Query private var transactions: [Transaction]
 
     @State private var showExplanation = false
+    @Namespace private var zoomNamespace
 
     private var pipeline: AIPipeline { appEnvironment.pipeline }
     private var isLoading: Bool {
@@ -69,6 +71,9 @@ struct HomeView: View {
             if let forecast = pipeline.forecast, let risk = pipeline.risk {
                 SpendPaceCard(forecast: forecast, risk: risk)
             }
+            if !dailySpend.isEmpty {
+                DailySpendCard(days: dailySpend)
+            }
             if !pipeline.recommendations.isEmpty {
                 RecommendationsCard(recommendations: pipeline.recommendations)
             }
@@ -103,11 +108,30 @@ struct HomeView: View {
         .padding()
     }
 
+    /// Every calendar day of the last two weeks (zero-filled so quiet days
+    /// still draw), spend only.
+    private var dailySpend: [DailySpendChart.Day] {
+        let calendar = Calendar.current
+        let start = calendar.date(byAdding: .day, value: -13, to: Date.now.startOfDay) ?? .now
+        var totals: [Date: Decimal] = [:]
+        for offset in 0...13 {
+            if let day = calendar.date(byAdding: .day, value: offset, to: start) {
+                totals[day] = 0
+            }
+        }
+        for transaction in transactions where transaction.countsAsSpend && transaction.date >= start {
+            totals[transaction.date.startOfDay, default: 0] += transaction.amount
+        }
+        return totals.map { DailySpendChart.Day(date: $0.key, total: $0.value) }
+            .sorted { $0.date < $1.date }
+    }
+
     /// Tapping opens the full Net Worth view — front and center, not buried
-    /// in Settings.
+    /// in Settings. Zooms out of the card (iOS 18+ zoom transition).
     private var netWorthCard: some View {
         NavigationLink {
             NetWorthView()
+                .navigationTransition(.zoom(sourceID: "netWorth", in: zoomNamespace))
         } label: {
             Card(title: "Net Worth", systemImage: "chart.line.uptrend.xyaxis") {
                 let netWorth = accounts.reduce(Decimal(0)) { $0 + $1.netWorthContribution }
@@ -132,6 +156,7 @@ struct HomeView: View {
             }
         }
         .buttonStyle(.plain)
+        .matchedTransitionSource(id: "netWorth", in: zoomNamespace)
     }
 
     private var netWorthChange30Days: Decimal? {

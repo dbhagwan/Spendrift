@@ -16,7 +16,12 @@ struct SafeToSpendCard: View {
                     Spacer()
                     ConfidenceBadge(confidence: decision.confidence)
                 }
-                AmountText(amount: decision.todayAllowance, font: .system(size: 46, weight: .bold), showCents: false)
+                AmountText(
+                    amount: decision.todayAllowance,
+                    font: .system(size: 54, weight: .bold),
+                    showCents: false,
+                    style: AnyShapeStyle(Theme.heroGradient)
+                )
                 HStack(spacing: 16) {
                     metric("This week", decision.weekAllowance)
                     metric("Rest of month", decision.monthRemainingAllowance)
@@ -25,9 +30,11 @@ struct SafeToSpendCard: View {
                 Button(action: onExplain) {
                     Label("Why this number?", systemImage: "sparkles")
                         .font(.footnote.weight(.medium))
+                        .padding(.horizontal, 2)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.glass)
                 .tint(Theme.accent)
+                .padding(.top, 2)
             }
         }
     }
@@ -221,6 +228,18 @@ struct UpcomingBillsCard: View {
                     AmountText(amount: charge.amount, font: .subheadline)
                 }
             }
+        }
+    }
+}
+
+/// Two weeks of daily spend at a glance, scrubbable.
+struct DailySpendCard: View {
+    var days: [DailySpendChart.Day]
+
+    var body: some View {
+        Card(title: "Last 14 Days", systemImage: "chart.bar.fill") {
+            DailySpendChart(days: days)
+                .frame(height: 110)
         }
     }
 }

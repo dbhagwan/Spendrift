@@ -18,6 +18,7 @@ struct BudgetView: View {
                 if let budget {
                     overviewCard(budget)
                     if let risk, !risk.categoryRisks.isEmpty {
+                        donutCard(risk)
                         categoriesCard(risk)
                     }
                     safeToSpendLinkCard
@@ -69,6 +70,17 @@ struct BudgetView: View {
                 }
                 Spacer()
             }
+        }
+    }
+
+    private func donutCard(_ risk: BudgetRiskAssessment) -> some View {
+        Card(title: "Where It's Going", systemImage: "chart.pie.fill") {
+            CategoryDonutChart(
+                slices: risk.categoryRisks
+                    .filter { $0.spent > 0 }
+                    .map { .init(category: $0.category, amount: $0.spent) }
+            )
+            .frame(height: 210)
         }
     }
 
@@ -136,9 +148,23 @@ struct BudgetEditorView: View {
 
     @State private var total: Double = 3500
     @State private var categoryLimits: [SpendingCategory: Double] = [:]
+    /// Categories whose current limit came from the AI fill (kept so they're
+    /// stored with `isAIRecommended` and badged in the UI).
+    @State private var aiFilled: Set<SpendingCategory> = []
 
     private var recommendedTotal: Double? {
         appEnvironment.pipeline.profile.map { ($0.averageMonthlySpend.doubleValue / 100).rounded() * 100 }
+    }
+
+    /// Per-category proposal straight from the spending profile: trailing
+    /// monthly average per category, rounded to a friendly number.
+    private var recommendedLimits: [SpendingCategory: Double] {
+        guard let profile = appEnvironment.pipeline.profile else { return [:] }
+        return profile.topCategories.reduce(into: [:]) { limits, spend in
+            guard !spend.category.isExcludedFromSpend else { return }
+            let rounded = (spend.monthlyAverage.doubleValue / 10).rounded() * 10
+            if rounded > 0 { limits[spend.category] = rounded }
+        }
     }
 
     var body: some View {
@@ -163,10 +189,26 @@ struct BudgetEditorView: View {
                 }
 
                 Section("Category budgets (optional)") {
+                    if !recommendedLimits.isEmpty {
+                        Button {
+                            for (category, limit) in recommendedLimits where categoryLimits[category] == nil {
+                                categoryLimits[category] = limit
+                                aiFilled.insert(category)
+                            }
+                        } label: {
+                            Label("Fill from your spending history", systemImage: "sparkles")
+                                .font(.subheadline)
+                        }
+                    }
                     ForEach(SpendingCategory.allCases.filter { !$0.isExcludedFromSpend }) { category in
                         HStack {
                             Label(category.displayName, systemImage: category.systemImage)
                                 .font(.subheadline)
+                            if aiFilled.contains(category) {
+                                Image(systemName: "sparkles")
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.accent)
+                            }
                             Spacer()
                             TextField(
                                 "—",
@@ -217,9 +259,11 @@ struct BudgetEditorView: View {
         for (category, limit) in categoryLimits {
             if let existingCategory = budget.categories.first(where: { $0.category == category }) {
                 existingCategory.monthlyLimit = Decimal(limit)
-                existingCategory.isAIRecommended = false
+                existingCategory.isAIRecommended = aiFilled.contains(category)
             } else if limit > 0 {
-                budget.categories.append(BudgetCategory(category: category, monthlyLimit: Decimal(limit)))
+                let budgetCategory = BudgetCategory(category: category, monthlyLimit: Decimal(limit))
+                budgetCategory.isAIRecommended = aiFilled.contains(category)
+                budget.categories.append(budgetCategory)
             }
         }
         budget.categories.removeAll { categoryLimits[$0.category] == 0 }

@@ -1,12 +1,26 @@
 import SwiftUI
 
-/// Design tokens. One accent (mint) plus a semantic palette — no gradients,
-/// no decoration. Financial data should read calm.
+/// Design tokens. One accent (mint) plus a semantic palette. Gradients are
+/// reserved for data — hero numbers and chart marks — so they read as
+/// signal, not decoration. Financial data should read calm.
 enum Theme {
     static let accent = Color("AccentColor")
     static let positive = Color(red: 0.18, green: 0.65, blue: 0.45)
     static let negative = Color(red: 0.85, green: 0.32, blue: 0.30)
     static let warning = Color(red: 0.88, green: 0.62, blue: 0.18)
+
+    /// Mint→ice gradient for hero numbers and primary chart strokes.
+    static let heroGradient = LinearGradient(
+        colors: [accent, Color(red: 0.35, green: 0.62, blue: 0.98)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    /// Vertical fade used under line charts (Apple Stocks direction).
+    static let chartAreaGradient = LinearGradient(
+        colors: [accent.opacity(0.35), accent.opacity(0.02)],
+        startPoint: .top,
+        endPoint: .bottom
+    )
 
     static let cardCornerRadius: CGFloat = 20
     static let cardPadding: CGFloat = 16
@@ -107,11 +121,15 @@ struct AmountText: View {
 
     @Environment(AppEnvironment.self) private var appEnvironment
 
+    /// Optional override (e.g. `Theme.heroGradient`) for hero numbers.
+    var style: AnyShapeStyle?
+
     var body: some View {
         Text(amount.currency(currencyCode, showCents: showCents))
             .font(font.weight(.semibold))
+            .fontDesign(.rounded)
             .monospacedDigit()
-            .foregroundStyle(color)
+            .foregroundStyle(style ?? AnyShapeStyle(color))
             .privacyBlur(appEnvironment.privacyModeEnabled)
             .contentTransition(.numericText())
     }
@@ -146,10 +164,18 @@ struct ProgressRing: View {
             Circle()
                 .trim(from: 0, to: min(1, progress))
                 .stroke(
-                    progress > 1 ? Theme.negative : Theme.accent,
+                    progress > 1
+                        ? AnyShapeStyle(Theme.negative)
+                        : AnyShapeStyle(AngularGradient(
+                            colors: [Theme.accent, Color(red: 0.35, green: 0.62, blue: 0.98), Theme.accent],
+                            center: .center,
+                            startAngle: .degrees(-90),
+                            endAngle: .degrees(270)
+                        )),
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
+                .shadow(color: (progress > 1 ? Theme.negative : Theme.accent).opacity(0.35), radius: 4)
                 .animation(.snappy, value: progress)
         }
         .frame(width: size, height: size)

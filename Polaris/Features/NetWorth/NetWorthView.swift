@@ -74,28 +74,46 @@ struct NetWorthView: View {
 
                 if visibleSnapshots.count > 1 {
                     Chart(visibleSnapshots) { snapshot in
-                        LineMark(
-                            x: .value("Date", snapshot.date),
-                            y: .value("Net worth", snapshot.netWorth.doubleValue)
-                        )
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(Theme.accent)
-
                         AreaMark(
                             x: .value("Date", snapshot.date),
                             y: .value("Net worth", snapshot.netWorth.doubleValue)
                         )
                         .interpolationMethod(.monotone)
-                        .foregroundStyle(Theme.accent.opacity(0.08))
+                        .foregroundStyle(Theme.chartAreaGradient)
+
+                        LineMark(
+                            x: .value("Date", snapshot.date),
+                            y: .value("Net worth", snapshot.netWorth.doubleValue)
+                        )
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .foregroundStyle(Theme.heroGradient)
 
                         if let selectedSnapshot, selectedSnapshot.id == snapshot.id {
                             RuleMark(x: .value("Selected", snapshot.date))
-                                .foregroundStyle(.secondary.opacity(0.4))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                .foregroundStyle(.secondary.opacity(0.5))
                             PointMark(
                                 x: .value("Date", snapshot.date),
                                 y: .value("Net worth", snapshot.netWorth.doubleValue)
                             )
+                            .symbolSize(120)
                             .foregroundStyle(Theme.accent)
+                            .annotation(
+                                position: .top,
+                                spacing: 8,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                            ) {
+                                HStack(spacing: 6) {
+                                    Text(snapshot.date.shortDay)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    AmountText(amount: snapshot.netWorth, font: .caption.bold(), showCents: false)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .glassEffect(.regular, in: Capsule())
+                            }
                         }
                     }
                     .chartYAxis {
@@ -109,6 +127,7 @@ struct NetWorthView: View {
                         }
                     }
                     .chartXSelection(value: $selectedDate)
+                    .sensoryFeedback(.selection, trigger: selectedSnapshot?.id)
                     .frame(height: 220)
                 } else {
                     EmptyStateView(

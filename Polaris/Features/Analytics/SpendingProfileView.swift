@@ -18,6 +18,9 @@ struct SpendingProfileView: View {
                     spacing: Theme.sectionSpacing
                 ) {
                     headlineCard(profile)
+                    if !profile.topCategories.isEmpty {
+                        donutCard(profile)
+                    }
                     fixedVariableCard(profile)
                     momentumCard(profile)
                     merchantsCard(profile)
@@ -53,13 +56,28 @@ struct SpendingProfileView: View {
         }
     }
 
+    private func donutCard(_ profile: SpendingProfile) -> some View {
+        Card(title: "Where It Goes", systemImage: "chart.pie.fill") {
+            CategoryDonutChart(
+                slices: profile.topCategories
+                    .filter { $0.monthlyAverage > 0 }
+                    .prefix(8)
+                    .map { .init(category: $0.category, amount: $0.monthlyAverage) },
+                centerCaption: "monthly average"
+            )
+            .frame(height: 210)
+        }
+    }
+
     private func fixedVariableCard(_ profile: SpendingProfile) -> some View {
         Card(title: "Fixed vs. Variable", systemImage: "square.stack.3d.up") {
             Chart {
                 BarMark(x: .value("Amount", profile.fixedMonthlySpend.doubleValue), y: .value("Type", "Fixed"))
-                    .foregroundStyle(Theme.accent)
+                    .cornerRadius(4)
+                    .foregroundStyle(Theme.heroGradient)
                 BarMark(x: .value("Amount", profile.variableMonthlySpend.doubleValue), y: .value("Type", "Variable"))
-                    .foregroundStyle(Theme.accent.opacity(0.45))
+                    .cornerRadius(4)
+                    .foregroundStyle(Theme.accent.opacity(0.4))
             }
             .chartXAxis {
                 AxisMarks { value in
@@ -92,7 +110,14 @@ struct SpendingProfileView: View {
                         x: .value("Change", (momentum.ratioToTrailingAverage - 1) * 100),
                         y: .value("Category", momentum.category.displayName)
                     )
+                    .cornerRadius(4)
                     .foregroundStyle(momentum.ratioToTrailingAverage > 1 ? Theme.negative : Theme.positive)
+                    .annotation(position: momentum.ratioToTrailingAverage > 1 ? .trailing : .leading, spacing: 4) {
+                        Text((momentum.ratioToTrailingAverage - 1).signedPercentString)
+                            .font(.caption2.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .chartXAxis {
                     AxisMarks { value in
