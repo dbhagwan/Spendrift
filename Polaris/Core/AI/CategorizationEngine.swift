@@ -37,6 +37,8 @@ final class CategorizationEngine: @unchecked Sendable {
         merchant: String,
         rawDescription: String,
         amount: Decimal,
+        date: Date = .now,
+        isRecurring: Bool = false,
         providerCategoryHint: String?
     ) async -> CategorizationResult {
         let normalized = Self.normalizeMerchant(rawDescription.isEmpty ? merchant : rawDescription)
@@ -47,16 +49,28 @@ final class CategorizationEngine: @unchecked Sendable {
         if let ruled = Self.ruleMatch(normalized: normalized, amount: amount) {
             return ruled
         }
-        if let hint = providerCategoryHint, let mapped = Self.mapProviderCategory(hint) {
-            return result(mapped, source: .provider, confidence: 0.75)
+
+        // Specific provider hints are trustworthy. Generic buckets are not —
+        // Plaid files a huge long tail under GENERAL_MERCHANDISE — so those
+        // go to the model as one signal among several instead of an answer.
+        let mappedHint = providerCategoryHint.flatMap(Self.mapProviderCategory)
+        if let mappedHint, mappedHint != .shopping, mappedHint != .miscellaneous {
+            return result(mappedHint, source: .provider, confidence: 0.75)
         }
 
-        // AI fallback for the long tail.
-        let aiResult = await ai.classifyTransaction(
+        let aiResult = await ai.classifyTransaction(TransactionClassificationRequest(
             merchant: normalized,
             rawDescription: rawDescription,
-            amount: amount
-        )
+            amount: amount,
+            date: date,
+            isRecurring: isRecurring,
+            providerCategoryHint: providerCategoryHint,
+            userExamples: relevantExamples(for: normalized)
+        ))
+        // A weak hint still beats a wild guess.
+        if let mappedHint, aiResult.confidence < 0.5 {
+            return result(mappedHint, source: .provider, confidence: 0.6)
+        }
         return CategorizationResult(
             category: aiResult.category,
             subcategory: aiResult.subcategory,
@@ -64,6 +78,24 @@ final class CategorizationEngine: @unchecked Sendable {
             confidence: aiResult.confidence,
             isEssential: aiResult.category.isTypicallyFixed || aiResult.category == .groceries
         )
+    }
+
+    /// Up to 8 correction-memory entries to use as few-shot examples, ones
+    /// sharing a word with this merchant first — so a single correction
+    /// ("Blue Bottle" → dining) also steers similar merchants.
+    private func relevantExamples(for merchant: String) -> [TransactionClassificationRequest.UserExample] {
+        let tokens = Set(merchant.lowercased().split(separator: " "))
+        return correctionMemory
+            .map { entry in
+                (overlap: Set(entry.key.split(separator: " ")).intersection(tokens).count,
+                 example: TransactionClassificationRequest.UserExample(
+                     merchant: entry.key.capitalized,
+                     categoryID: entry.value.rawValue
+                 ))
+            }
+            .sorted { $0.overlap > $1.overlap }
+            .prefix(8)
+            .map(\.example)
     }
 
     /// Record a user correction so the same merchant categorizes correctly

@@ -56,6 +56,34 @@ final class AIPipeline {
             transaction.isRecurring = recurringMerchants.contains(transaction.normalizedDescription.lowercased())
         }
 
+        // 2.5 AI review sweep: transactions whose category came out of sync
+        // with low confidence get one more pass now that recurring status is
+        // known and the user's correction memory may have grown since.
+        // Bounded per run so recompute stays fast; the flag is cleared
+        // either way to avoid re-litigating the same transactions forever.
+        let reviewQueue = transactions
+            .filter { $0.needsAIReview && $0.categorySource != .user && !$0.isTransfer }
+            .sorted { $0.date > $1.date }
+            .prefix(20)
+        for transaction in reviewQueue {
+            let revised = await categorization.categorize(
+                merchant: transaction.merchantName,
+                rawDescription: transaction.rawDescription,
+                amount: transaction.amount,
+                date: transaction.date,
+                isRecurring: transaction.isRecurring,
+                providerCategoryHint: nil
+            )
+            if revised.confidence > transaction.categoryConfidence {
+                transaction.category = revised.category
+                transaction.subcategory = revised.subcategory ?? transaction.subcategory
+                transaction.categorySource = revised.source
+                transaction.categoryConfidence = revised.confidence
+                transaction.isEssential = revised.isEssential
+            }
+            transaction.needsAIReview = false
+        }
+
         // 3. Match unmatched receipts to transactions.
         for receipt in receipts where receipt.matchStatus == .unmatched {
             if let match = ReceiptMatcher.bestMatch(for: receipt, in: transactions), match.confidence >= 0.65 {
@@ -123,6 +151,22 @@ final class AIPipeline {
         transaction.categoryConfidence = 1.0
         transaction.isEssential = category.isTypicallyFixed || category == .groceries
         categorization.learn(merchant: transaction.normalizedDescription, category: category)
+
+        // One correction fixes the merchant everywhere: retroactively apply
+        // it to past transactions with the same normalized merchant.
+        let key = transaction.normalizedDescription.lowercased()
+        let all = (try? context.fetch(FetchDescriptor<Transaction>())) ?? []
+        for sibling in all
+        where sibling.id != transaction.id
+            && sibling.categorySource != .user
+            && sibling.normalizedDescription.lowercased() == key
+        {
+            sibling.category = category
+            sibling.categorySource = .user
+            sibling.categoryConfidence = 0.98
+            sibling.isEssential = category.isTypicallyFixed || category == .groceries
+            sibling.needsAIReview = false
+        }
         await recompute(in: context)
     }
 

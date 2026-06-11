@@ -38,6 +38,10 @@ final class Transaction {
     var isEssential: Bool = false
     var isAnomaly: Bool = false
     var isHidden: Bool = false
+    /// Set when categorization confidence was low at sync time; the AI review
+    /// sweep in `AIPipeline.recompute` re-classifies these (and clears the
+    /// flag) once recurring status and fresh user corrections are available.
+    var needsAIReview: Bool = false
     var receiptID: UUID?
     var locationCity: String?
     var locationRegion: String?

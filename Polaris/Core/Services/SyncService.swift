@@ -48,9 +48,14 @@ struct BackendSyncService: SyncService {
                 merchant: dto.merchantName,
                 rawDescription: dto.rawDescription,
                 amount: dto.amount,
+                date: dto.date,
                 providerCategoryHint: dto.providerCategory
             )
-            context.insert(dto.makeTransaction(accountID: accountID, categorization: result))
+            let transaction = dto.makeTransaction(accountID: accountID, categorization: result)
+            // Low-confidence categories get a second AI pass in recompute,
+            // once recurring detection has run (see AIPipeline).
+            transaction.needsAIReview = result.confidence < 0.65 && result.source != .user
+            context.insert(transaction)
         }
 
         try context.save()

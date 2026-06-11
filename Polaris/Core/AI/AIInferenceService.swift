@@ -7,11 +7,31 @@ import Foundation
 /// runs on-device via Apple's Foundation Models framework. `MockAIService`
 /// provides the deterministic heuristics used in previews and as the runtime
 /// fallback when the on-device model is unavailable.
+/// Everything the classifier can know about a transaction. The more signal
+/// the model sees, the better the long tail gets — especially the user's own
+/// past corrections, which act as few-shot examples so one correction
+/// generalizes to similar merchants.
+struct TransactionClassificationRequest: Sendable {
+    struct UserExample: Sendable {
+        var merchant: String
+        var categoryID: String
+    }
+
+    var merchant: String
+    var rawDescription: String
+    var amount: Decimal
+    var date: Date = .now
+    var isRecurring: Bool = false
+    /// Coarse provider category (e.g. Plaid's GENERAL_MERCHANDISE), used as
+    /// one signal among several rather than an answer.
+    var providerCategoryHint: String?
+    /// Correction-memory entries, most relevant to this merchant first.
+    var userExamples: [UserExample] = []
+}
+
 protocol AIInferenceService: Sendable {
     func classifyTransaction(
-        merchant: String,
-        rawDescription: String,
-        amount: Decimal
+        _ request: TransactionClassificationRequest
     ) async -> (category: SpendingCategory, subcategory: String?, confidence: Double)
 
     /// Structured extraction from raw receipt OCR text, used when the
@@ -31,14 +51,22 @@ protocol AIInferenceService: Sendable {
 /// Heuristics here intentionally mirror the shapes of real outputs.
 struct MockAIService: AIInferenceService {
     func classifyTransaction(
-        merchant: String,
-        rawDescription: String,
-        amount: Decimal
+        _ request: TransactionClassificationRequest
     ) async -> (category: SpendingCategory, subcategory: String?, confidence: Double) {
         // Cheap heuristic stand-in for the real classifier.
-        if amount < 0 { return (.income, nil, 0.6) }
-        if amount < 20 { return (.dining, nil, 0.45) }
-        if amount > 800 { return (.housing, nil, 0.4) }
+        let merchant = request.merchant.lowercased()
+        if let example = request.userExamples.first(where: {
+            let known = $0.merchant.lowercased()
+            return merchant.contains(known) || known.contains(merchant)
+        }), let learned = SpendingCategory(rawValue: example.categoryID) {
+            return (learned, nil, 0.7)
+        }
+        if request.isRecurring, request.amount > 0, request.amount < 100 {
+            return (.subscriptions, nil, 0.55)
+        }
+        if request.amount < 0 { return (.income, nil, 0.6) }
+        if request.amount < 20 { return (.dining, nil, 0.45) }
+        if request.amount > 800 { return (.housing, nil, 0.4) }
         return (.shopping, nil, 0.4)
     }
 

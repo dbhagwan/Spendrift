@@ -45,33 +45,56 @@ struct FoundationModelsAIService: AIInferenceService {
     }
 
     func classifyTransaction(
-        merchant: String,
-        rawDescription: String,
-        amount: Decimal
+        _ request: TransactionClassificationRequest
     ) async -> (category: SpendingCategory, subcategory: String?, confidence: Double) {
         guard isModelAvailable else {
-            return await fallback.classifyTransaction(merchant: merchant, rawDescription: rawDescription, amount: amount)
+            return await fallback.classifyTransaction(request)
         }
         do {
             let session = LanguageModelSession(instructions: """
                 You classify US personal-finance bank transactions into a fixed \
                 category taxonomy. Positive amounts are money out, negative are \
-                money in. Be conservative with confidence.
+                money in. Recurring monthly charges are usually subscriptions, \
+                utilities, insurance, housing, or debt payments. When a merchant \
+                resembles one the user already filed, follow the user's filing. \
+                Be conservative with confidence.
                 """)
-            let prompt = """
-                Merchant: \(merchant)
-                Raw descriptor: \(rawDescription)
-                Amount: \(amount)
-                """
-            let result = try await session.respond(to: prompt, generating: TransactionClassification.self).content
+            let result = try await session.respond(
+                to: Self.classificationPrompt(for: request),
+                generating: TransactionClassification.self
+            ).content
             return (
                 SpendingCategory(rawValue: result.category) ?? .miscellaneous,
                 result.subcategory,
                 min(max(result.confidence, 0), 1)
             )
         } catch {
-            return await fallback.classifyTransaction(merchant: merchant, rawDescription: rawDescription, amount: amount)
+            return await fallback.classifyTransaction(request)
         }
+    }
+
+    /// Terse, line-per-signal prompt — the on-device model has a small
+    /// context window, so examples are capped and every line earns its place.
+    private static func classificationPrompt(for request: TransactionClassificationRequest) -> String {
+        var lines = [
+            "Merchant: \(request.merchant)",
+            "Raw descriptor: \(request.rawDescription)",
+            "Amount: \(request.amount) (\(request.amount < 0 ? "money in" : "money out"))",
+            "Day: \(request.date.formatted(.dateTime.weekday(.wide)))",
+        ]
+        if request.isRecurring {
+            lines.append("Pattern: part of a stable recurring series")
+        }
+        if let hint = request.providerCategoryHint {
+            lines.append("Bank's coarse category hint: \(hint)")
+        }
+        if !request.userExamples.isEmpty {
+            lines.append("How this user filed other merchants:")
+            for example in request.userExamples.prefix(8) {
+                lines.append("- \(example.merchant) → \(example.categoryID)")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Receipt extraction
