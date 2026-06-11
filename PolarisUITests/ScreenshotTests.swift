@@ -80,6 +80,7 @@ final class ScreenshotTests: XCTestCase {
                 sleep(1)
                 snap("08-safe-to-spend-explanation\(suffix)")
                 app.buttons["Done"].tap()
+                sleep(2) // let the dismissal settle before the next query
             }
         }
 
@@ -210,16 +211,16 @@ final class ScreenshotTests: XCTestCase {
     }
 
     /// First static text matching any of the given labels (Card titles render
-    /// uppercased, so callers pass both forms).
+    /// uppercased, so callers pass both forms). Uses expectation-based
+    /// waiting — polling `.exists` can blow the snapshot deadline when the
+    /// runner is busy encoding the walkthrough video.
     private func firstExisting(_ labels: [String], timeout: TimeInterval) -> XCUIElement? {
-        let deadline = Date.now.addingTimeInterval(timeout)
-        repeat {
-            for label in labels {
-                let element = app.staticTexts[label].firstMatch
-                if element.exists { return element }
+        for (index, label) in labels.enumerated() {
+            let element = app.staticTexts[label].firstMatch
+            if element.waitForExistence(timeout: index == 0 ? timeout : 3) {
+                return element
             }
-            usleep(500_000)
-        } while Date.now < deadline
+        }
         return nil
     }
 

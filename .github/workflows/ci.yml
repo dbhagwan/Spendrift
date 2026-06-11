@@ -88,8 +88,10 @@ jobs:
           set -o pipefail
           # The UI test session doubles as the video walkthrough: record the
           # simulator for the duration, finalize after tests with SIGINT.
+          # HEVC is hardware-encoded on the Apple-silicon runners — h264 was
+          # software-encoded and starved the UI tests into snapshot timeouts.
           xcrun simctl io "${{ steps.sim.outputs.udid }}" recordVideo \
-            --codec h264 --force walkthrough.mp4 &
+            --codec hevc --force walkthrough.mp4 &
           echo $! > video.pid
           xcodebuild test-without-building \
             -project Polaris.xcodeproj \
