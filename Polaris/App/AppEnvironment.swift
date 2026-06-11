@@ -29,7 +29,9 @@ final class AppEnvironment {
         self.pipeline = AIPipeline(ai: ai)
         self.syncService = useMocks ? MockSyncService() : BackendSyncService(api: api)
         self.auth = AuthService()
-        self.plaidLink = PlaidLinkService(api: api)
+        // Mock mode simulates the Link flow so onboarding works without
+        // Plaid credentials; real mode presents the LinkKit SDK.
+        self.plaidLink = PlaidLinkService(api: api, simulated: useMocks)
         self.receiptCapture = ReceiptCaptureService(ai: ai)
     }
 

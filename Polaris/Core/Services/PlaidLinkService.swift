@@ -1,21 +1,40 @@
 import Foundation
+import LinkKit
+import UIKit
 
-/// Wraps the Plaid Link flow. Token lifecycle:
-///   1. backend creates a `link_token` (POST /plaid/link-token)
-///   2. app presents Plaid Link with it
-///   3. Link returns a `public_token` on success
-///   4. app posts it to the backend, which exchanges it for an `access_token`
-///      and stores it server-side. The access token NEVER reaches the device.
+/// Presents the Plaid Link flow and completes the token exchange.
 ///
-/// TODO: Add the Plaid Link iOS SDK via Swift Package Manager
-/// (https://github.com/plaid/plaid-link-ios) and replace the stubbed
-/// presentation below with `LinkKit.Plaid.create(...)`.
+/// Token lifecycle (the access token never reaches the device):
+///   1. backend creates a `link_token` (POST /plaid/link-token)
+///   2. this service presents Plaid Link with it
+///   3. Link returns a `public_token` + institution metadata on success
+///   4. backend exchanges it for an `access_token` and stores it server-side
+///
+/// In mock mode (`simulated: true`) the SDK is skipped entirely and a fake
+/// institution is returned, keeping the whole app navigable without a
+/// backend or Plaid credentials.
 @MainActor
 final class PlaidLinkService {
-    private let api: BackendAPI
+    enum LinkError: LocalizedError {
+        case exited(String?)
+        case noPresenter
 
-    init(api: BackendAPI) {
+        var errorDescription: String? {
+            switch self {
+            case .exited(let message): message ?? "Linking was cancelled."
+            case .noPresenter: "Unable to present Plaid Link."
+            }
+        }
+    }
+
+    private let api: BackendAPI
+    private let simulated: Bool
+    /// Kept alive for the duration of the Link session.
+    private var handler: Handler?
+
+    init(api: BackendAPI, simulated: Bool) {
         self.api = api
+        self.simulated = simulated
     }
 
     struct LinkResult: Sendable {
@@ -24,22 +43,72 @@ final class PlaidLinkService {
     }
 
     func linkNewInstitution() async throws -> LinkResult {
+        if simulated {
+            try? await Task.sleep(for: .milliseconds(400))
+            return LinkResult(
+                institutionName: "Plaid Sandbox Bank",
+                providerItemID: "item-simulated-\(UUID().uuidString.prefix(8))"
+            )
+        }
         let linkToken = try await api.createLinkToken()
-
-        // TODO(plaid-sdk): present Plaid Link UI with `linkToken` here.
-        // let handler = try Plaid.create(LinkTokenConfiguration(token: linkToken) { success in ... })
-        // handler.open(presentUsing: ...)
-        _ = linkToken
-
-        // Until the SDK is wired up, simulate a successful link so the
-        // onboarding flow is fully navigable in development.
-        let publicToken = "public-sandbox-simulated"
-        let exchange = try await api.exchangePublicToken(publicToken)
+        let success = try await presentLink(token: linkToken)
+        let exchange = try await api.exchangePublicToken(
+            success.publicToken,
+            institutionName: success.institutionName
+        )
         return LinkResult(institutionName: exchange.institutionName, providerItemID: exchange.itemID)
     }
 
     func relink(itemID: String) async throws {
-        // TODO(plaid-sdk): create link token in update mode and re-present Link.
+        // TODO(backend): add update-mode link tokens (POST /plaid/link-token
+        // with item_id) and re-present Link here.
         _ = try await api.createLinkToken()
+    }
+
+    // MARK: - Link presentation
+
+    private func presentLink(token: String) async throws -> (publicToken: String, institutionName: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            var configuration = LinkTokenConfiguration(token: token) { success in
+                // LinkKit calls back on the main thread.
+                MainActor.assumeIsolated {
+                    self.handler = nil
+                    continuation.resume(returning: (
+                        success.publicToken,
+                        success.metadata.institution.name
+                    ))
+                }
+            }
+            configuration.onExit = { exit in
+                MainActor.assumeIsolated {
+                    self.handler = nil
+                    continuation.resume(throwing: LinkError.exited(exit.error?.localizedDescription))
+                }
+            }
+
+            switch Plaid.create(configuration) {
+            case .success(let handler):
+                self.handler = handler
+                guard let presenter = Self.topViewController() else {
+                    self.handler = nil
+                    continuation.resume(throwing: LinkError.noPresenter)
+                    return
+                }
+                handler.open(presentUsing: .viewController(presenter))
+            case .failure(let error):
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    private static func topViewController() -> UIViewController? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        var top = (windows.first(where: \.isKeyWindow) ?? windows.first)?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 }

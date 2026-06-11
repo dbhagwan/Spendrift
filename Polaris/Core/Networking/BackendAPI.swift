@@ -27,8 +27,11 @@ struct BackendAPI: Sendable {
         let institutionName: String
     }
 
-    func exchangePublicToken(_ publicToken: String) async throws -> ExchangeResult {
-        try await post("plaid/exchange", body: ["publicToken": publicToken])
+    func exchangePublicToken(_ publicToken: String, institutionName: String) async throws -> ExchangeResult {
+        try await post("plaid/exchange", body: [
+            "publicToken": publicToken,
+            "institutionName": institutionName,
+        ])
     }
 
     // MARK: - Sync

@@ -54,13 +54,25 @@ Then build and run the `Polaris` scheme. **The app runs fully in mock mode by de
 
 To run against a real backend, flip `useMocks` to `false` and point `BackendAPI.baseURL` at your deployment.
 
+## Hooking up Plaid (sandbox)
+
+The Plaid Link iOS SDK (LinkKit, via SPM) is wired into `PlaidLinkService`; mock mode bypasses it. To run the real flow end-to-end:
+
+1. Create a free account at [dashboard.plaid.com](https://dashboard.plaid.com) and copy your **client ID** and **sandbox secret**.
+2. `cd Backend && cp .env.example .env` and fill in `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`; start Postgres, load `src/db/schema.sql`, then `npm run dev`.
+3. In `PolarisApp.swift`, set `AppEnvironment(useMocks: false)`. On a simulator, the default `BackendAPI.baseURL` (`http://localhost:3000`) already points at your dev backend; on a device, change it to your Mac's LAN address.
+4. Run the app → onboarding → **Connect with Plaid** → pick any institution and sign in with Plaid's sandbox credentials: username `user_good`, password `pass_good`.
+5. Link completes → backend exchanges the public token (access token stays server-side) → cursor sync pulls accounts/transactions → the AI pipeline takes it from there.
+
+For production institutions using OAuth (Chase, etc.) you'll also need to configure a redirect URI in the Plaid dashboard and an associated domain — not needed for sandbox.
+
 ### TODOs before production
 
 Search the codebase for `TODO(` — the important ones:
 
-- `TODO(plaid-sdk)` — add the [Plaid Link iOS SDK](https://github.com/plaid/plaid-link-ios) via SPM and wire `PlaidLinkService`.
-- `TODO(backend)` — Sign in with Apple token exchange and receipt upload.
+- `TODO(backend)` — Sign in with Apple token exchange, receipt upload, update-mode link tokens for relinking.
 - `TODO(production)` in `Backend/` — webhook verification, encrypted token storage, real job queue, object storage for receipts.
+- Plaid OAuth redirect URI + associated domain for OAuth institutions.
 - Set `DEVELOPMENT_TEAM` in `project.yml`.
 
 ## Getting started (backend)

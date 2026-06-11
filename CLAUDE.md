@@ -42,7 +42,7 @@ Icons: `python3 scripts/generate_icons.py` (Pillow).
 
 **Dependency injection:** `App/AppEnvironment.swift` is the composition root, injected via SwiftUI `.environment()`. Previews use `AppEnvironment.mock()` + `ModelContainerFactory.preview()` (in-memory, seeded).
 
-**Secrets:** Plaid access tokens and model API keys exist only in `Backend/`. The device stores only a session token / Apple user ID in the Keychain (`KeychainStore`). Don't add provider API calls to the iOS app.
+**Plaid:** the Link iOS SDK (LinkKit, SPM package in `project.yml`) is presented by `PlaidLinkService`; mock mode (`simulated: true`) bypasses the SDK entirely. **Secrets:** Plaid access tokens and model API keys exist only in `Backend/`. The device stores only a session token / Apple user ID in the Keychain (`KeychainStore`). Don't add provider API calls to the iOS app.
 
 **iCloud sync (three channels):** (1) SwiftData→CloudKit private database (`ModelContainerFactory` — falls back to local-only when iCloud is unavailable, e.g. simulators/CI); because of CloudKit rules, `@Model` classes must have **no `@Attribute(.unique)`** and **every stored property needs a default value** — keep this invariant when adding models. (2) iCloud Keychain (`KeychainStore` items are `kSecAttrSynchronizable`) carries credentials so a new device is pre-authenticated and the backend returns the same Plaid-linked institutions. (3) `NSUbiquitousKeyValueStore` syncs the categorization correction memory. Entitlements live in `project.yml`.
 

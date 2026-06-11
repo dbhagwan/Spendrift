@@ -5,6 +5,12 @@ options:
     iOS: "26.0"
   createIntermediateGroups: true
 
+packages:
+  # Plaid Link — official iOS SDK for the bank-linking flow.
+  LinkKit:
+    url: https://github.com/plaid/plaid-link-ios
+    from: 6.0.0
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -51,8 +57,7 @@ targets:
     dependencies:
       - target: PolarisWidgets
         embed: true
-      # TODO: Add the Plaid Link iOS SDK via SPM once backend is configured:
-      # https://github.com/plaid/plaid-link-ios
+      - package: LinkKit
 
   PolarisWidgets:
     type: app-extension
