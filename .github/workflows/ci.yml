@@ -44,11 +44,20 @@ jobs:
         id: sim
         run: |
           UDID=$(xcrun simctl list devices available --json | python3 -c "
-          import json, sys
+          import json, re, sys
           data = json.load(sys.stdin)
-          devices = [d for runtime, devs in data['devices'].items() if 'iOS' in runtime for d in devs if d['name'].startswith('iPhone')]
-          devices.sort(key=lambda d: d['name'], reverse=True)
-          print(devices[0]['udid'] if devices else '')")
+          candidates = []
+          for runtime, devs in data['devices'].items():
+              m = re.search(r'iOS-(\d+)-(\d+)', runtime)
+              if not m:
+                  continue
+              version = (int(m.group(1)), int(m.group(2)))
+              for d in devs:
+                  if d['name'].startswith('iPhone'):
+                      # Prefer newest iOS, then Pro models.
+                      candidates.append((version, 'Pro' in d['name'], d['name'], d['udid']))
+          candidates.sort(reverse=True)
+          print(candidates[0][3] if candidates else '')")
           if [ -z "$UDID" ]; then
             echo "No iPhone simulator available"; xcrun simctl list devices; exit 1
           fi

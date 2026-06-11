@@ -3,9 +3,10 @@ import Foundation
 /// Boundary for model-backed inference. Implementations must return validated
 /// structured values — the app never renders raw model text.
 ///
-/// `MockAIService` powers previews and local development. The production
-/// implementation calls the backend's AI orchestration endpoints (the backend
-/// holds the model API keys; the app never talks to a model provider directly).
+/// `FoundationModelsAIService` is the production implementation: all inference
+/// runs on-device via Apple's Foundation Models framework. `MockAIService`
+/// provides the deterministic heuristics used in previews and as the runtime
+/// fallback when the on-device model is unavailable.
 protocol AIInferenceService: Sendable {
     func classifyTransaction(
         merchant: String,

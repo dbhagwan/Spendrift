@@ -21,9 +21,10 @@ final class AppEnvironment {
     init(useMocks: Bool) {
         let api = BackendAPI()
         self.api = api
-        // TODO(production): replace MockAIService with the backend-driven
-        // implementation once Backend/ is deployed.
-        let ai = MockAIService()
+        // All AI runs on-device via Apple's Foundation Models (Apple
+        // Intelligence). Falls back to deterministic heuristics wherever the
+        // model is unavailable (ineligible device, AI disabled, simulators).
+        let ai = FoundationModelsAIService()
         self.ai = ai
         self.pipeline = AIPipeline(ai: ai)
         self.syncService = useMocks ? MockSyncService() : BackendSyncService(api: api)
