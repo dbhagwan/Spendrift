@@ -119,12 +119,40 @@ final class ScreenshotTests: XCTestCase {
 
         // ── Net Worth (now a first-class tab) ───────────────────────
         captureTab("Net Worth", screenshot: "13-net-worth\(suffix)")
+        // Allocation donut + per-account rows live below the trend chart.
+        app.swipeUp()
+        sleep(1)
+        snap("13b-net-worth-allocation\(suffix)")
+        let allocationSpin = app.buttons["Spin in 3D"].firstMatch
+        if allocationSpin.exists && allocationSpin.isHittable {
+            allocationSpin.tap()
+            sleep(2)
+            snap("13c-allocation-spin-3d\(suffix)")
+            app.swipeLeft()
+            sleep(1)
+            snap("13d-allocation-spin-rotated\(suffix)")
+            app.buttons["Close"].firstMatch.tap()
+            sleep(1)
+        }
+        app.swipeDown() // bring the minimized tab bar back
+        sleep(1)
 
         // ── Spending Profile: donut, momentum, audit insights ───────
         captureTab("Spending Profile", screenshot: "14-spending-profile\(suffix)")
 
-        // ── Budget: ring, donut, what-if ────────────────────────────
+        // ── Budget: ring, donut, 3D spin, what-if ───────────────────
         captureTab("Budget", screenshot: "15-budget\(suffix)")
+        let categorySpin = app.buttons["Spin in 3D"].firstMatch
+        if categorySpin.waitForExistence(timeout: 5) && categorySpin.isHittable {
+            categorySpin.tap()
+            sleep(2)
+            snap("15b-category-spin-3d\(suffix)")
+            app.swipeLeft()
+            sleep(1)
+            snap("15c-category-spin-rotated\(suffix)")
+            app.buttons["Close"].firstMatch.tap()
+            sleep(1)
+        }
         if let whatIf = firstExisting(["WHAT IF…", "What If…"], timeout: 5) {
             whatIf.tap()
             sleep(2)

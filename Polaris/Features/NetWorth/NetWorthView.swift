@@ -32,6 +32,7 @@ struct NetWorthView: View {
 
     @State private var range: Range = .threeMonths
     @State private var selectedDate: Date?
+    @State private var showSpinView = false
 
     private var visibleSnapshots: [NetWorthSnapshot] {
         guard let start = range.startDate else { return snapshots }
@@ -53,6 +54,7 @@ struct NetWorthView: View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
                 chartCard
+                allocationCard
                 breakdownCard
             }
             .padding()
@@ -60,6 +62,77 @@ struct NetWorthView: View {
         .background(AppBackground())
         .navigationTitle(showsTitle ? "Net Worth" : "")
         .navigationBarTitleDisplayMode(showsTitle ? .automatic : .inline)
+        .fullScreenCover(isPresented: $showSpinView) {
+            DonutSpinView(title: "Allocation", slices: allocationSlices)
+        }
+    }
+
+    // MARK: - Allocation (where the money sits)
+
+    private var allocationAccounts: [Account] {
+        accounts.filter { !$0.isHidden && !$0.kind.isLiability && $0.netWorthContribution > 0 }
+    }
+
+    private var allocationSlices: [DonutSlice] {
+        allocationAccounts.map { account in
+            DonutSlice(
+                id: account.id.uuidString,
+                label: account.name,
+                amount: account.netWorthContribution,
+                color: account.kind.chartColor,
+                systemImage: account.kind.chartSystemImage
+            )
+        }
+    }
+
+    /// Robinhood-style allocation: the ring shows each account's share of
+    /// your assets, the rows underneath spell it out.
+    private var allocationCard: some View {
+        Card(title: "Allocation", systemImage: "chart.pie.fill") {
+            let total = allocationAccounts.reduce(Decimal(0)) { $0 + $1.netWorthContribution }
+            if allocationAccounts.isEmpty {
+                Text("Connect accounts to see where your money sits.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                DonutChart(
+                    slices: allocationSlices,
+                    centerCaption: "across accounts",
+                    showsPercentLabels: true
+                )
+                .frame(height: 220)
+                ForEach(allocationAccounts) { account in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(account.kind.chartColor)
+                            .frame(width: 8, height: 8)
+                        Text("\(account.name) ••\(account.mask)")
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Spacer()
+                        if total > 0 {
+                            Text((account.netWorthContribution / total).doubleValue.percentString)
+                                .font(.subheadline.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        AmountText(amount: account.netWorthContribution, font: .subheadline, showCents: false)
+                            .frame(width: 84, alignment: .trailing)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button {
+                        showSpinView = true
+                    } label: {
+                        Label("Spin in 3D", systemImage: "rotate.3d")
+                            .font(.footnote.weight(.medium))
+                    }
+                    .buttonStyle(.glass)
+                    Spacer()
+                }
+            }
+        }
     }
 
     private var chartCard: some View {

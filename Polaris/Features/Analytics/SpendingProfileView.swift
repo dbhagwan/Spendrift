@@ -10,6 +10,15 @@ struct SpendingProfileView: View {
 
     private var profile: SpendingProfile? { appEnvironment.pipeline.profile }
 
+    @State private var showSpinView = false
+
+    private var categorySlices: [DonutSlice] {
+        (profile?.topCategories ?? [])
+            .filter { $0.monthlyAverage > 0 }
+            .prefix(8)
+            .map { DonutSlice(category: $0.category, amount: $0.monthlyAverage) }
+    }
+
     var body: some View {
         ScrollView {
             if let profile {
@@ -40,6 +49,9 @@ struct SpendingProfileView: View {
             }
         }
         .background(AppBackground())
+        .fullScreenCover(isPresented: $showSpinView) {
+            DonutSpinView(title: "Where It Goes", slices: categorySlices)
+        }
     }
 
     private func headlineCard(_ profile: SpendingProfile) -> some View {
@@ -58,14 +70,23 @@ struct SpendingProfileView: View {
 
     private func donutCard(_ profile: SpendingProfile) -> some View {
         Card(title: "Where It Goes", systemImage: "chart.pie.fill") {
-            CategoryDonutChart(
-                slices: profile.topCategories
-                    .filter { $0.monthlyAverage > 0 }
-                    .prefix(8)
-                    .map { .init(category: $0.category, amount: $0.monthlyAverage) },
-                centerCaption: "monthly average"
+            DonutChart(
+                slices: categorySlices,
+                centerCaption: "monthly average",
+                showsPercentLabels: true
             )
             .frame(height: 210)
+            HStack {
+                Spacer()
+                Button {
+                    showSpinView = true
+                } label: {
+                    Label("Spin in 3D", systemImage: "rotate.3d")
+                        .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.glass)
+                Spacer()
+            }
         }
     }
 

@@ -7,6 +7,7 @@ struct BudgetView: View {
     @Query private var budgets: [Budget]
 
     @State private var showEditor = false
+    @State private var showSpinView = false
 
     private var budget: Budget? { budgets.first }
     private var risk: BudgetRiskAssessment? { appEnvironment.pipeline.risk }
@@ -47,6 +48,9 @@ struct BudgetView: View {
         .sheet(isPresented: $showEditor) {
             BudgetEditorView(existing: budget)
         }
+        .fullScreenCover(isPresented: $showSpinView) {
+            DonutSpinView(title: "Where It's Going", slices: categorySlices)
+        }
     }
 
     private func overviewCard(_ budget: Budget) -> some View {
@@ -74,14 +78,27 @@ struct BudgetView: View {
         }
     }
 
+    private var categorySlices: [DonutSlice] {
+        (risk?.categoryRisks ?? [])
+            .filter { $0.spent > 0 }
+            .map { DonutSlice(category: $0.category, amount: $0.spent) }
+    }
+
     private func donutCard(_ risk: BudgetRiskAssessment) -> some View {
         Card(title: "Where It's Going", systemImage: "chart.pie.fill") {
-            CategoryDonutChart(
-                slices: risk.categoryRisks
-                    .filter { $0.spent > 0 }
-                    .map { .init(category: $0.category, amount: $0.spent) }
-            )
-            .frame(height: 210)
+            DonutChart(slices: categorySlices, showsPercentLabels: true)
+                .frame(height: 210)
+            HStack {
+                Spacer()
+                Button {
+                    showSpinView = true
+                } label: {
+                    Label("Spin in 3D", systemImage: "rotate.3d")
+                        .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.glass)
+                Spacer()
+            }
         }
     }
 

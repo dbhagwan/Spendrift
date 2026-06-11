@@ -29,23 +29,72 @@ extension SpendingCategory {
     }
 }
 
-/// Interactive donut: tap (or drag) a sector to see its share in the center.
-/// Used for "where the money goes" on Budget and Spending Profile.
-struct CategoryDonutChart: View {
-    struct Slice: Identifiable {
-        var category: SpendingCategory
-        var amount: Decimal
-        var id: String { category.rawValue }
+/// Account-kind palette + icons for the net-worth allocation donut.
+extension AccountKind {
+    var chartColor: Color {
+        switch self {
+        case .checking: Color(red: 0.35, green: 0.62, blue: 0.98)
+        case .savings: Color(red: 0.22, green: 0.72, blue: 0.60)
+        case .creditCard: Color(red: 0.92, green: 0.45, blue: 0.55)
+        case .loan: Color(red: 0.75, green: 0.55, blue: 0.35)
+        case .investment: Color(red: 0.55, green: 0.45, blue: 0.95)
+        case .other: Color(red: 0.55, green: 0.55, blue: 0.60)
+        }
     }
 
-    var slices: [Slice]
+    var chartSystemImage: String {
+        switch self {
+        case .checking: "banknote"
+        case .savings: "building.columns"
+        case .creditCard: "creditcard"
+        case .loan: "percent"
+        case .investment: "chart.line.uptrend.xyaxis"
+        case .other: "tray"
+        }
+    }
+}
+
+/// One ring segment — generic so the same donut renders category splits and
+/// account allocations.
+struct DonutSlice: Identifiable, Equatable, Sendable {
+    var id: String
+    var label: String
+    var amount: Decimal
+    var color: Color
+    var systemImage: String?
+
+    init(id: String, label: String, amount: Decimal, color: Color, systemImage: String? = nil) {
+        self.id = id
+        self.label = label
+        self.amount = amount
+        self.color = color
+        self.systemImage = systemImage
+    }
+
+    init(category: SpendingCategory, amount: Decimal) {
+        self.init(
+            id: category.rawValue,
+            label: category.displayName,
+            amount: amount,
+            color: category.chartColor,
+            systemImage: category.systemImage
+        )
+    }
+}
+
+/// Interactive donut: tap (or drag) a sector to see its share in the center —
+/// every selection change clicks via haptics. Optional Robinhood-style
+/// percent labels on the ring band.
+struct DonutChart: View {
+    var slices: [DonutSlice]
     var centerCaption: String = "this period"
+    var showsPercentLabels = false
 
     @State private var selectedAngle: Double?
 
     private var total: Decimal { slices.reduce(0) { $0 + $1.amount } }
 
-    private var selectedSlice: Slice? {
+    private var selectedSlice: DonutSlice? {
         guard let selectedAngle else { return nil }
         var running = 0.0
         for slice in slices {
@@ -63,7 +112,7 @@ struct CategoryDonutChart: View {
                 angularInset: 1.5
             )
             .cornerRadius(4)
-            .foregroundStyle(slice.category.chartColor)
+            .foregroundStyle(slice.color)
             .opacity(selectedSlice == nil || selectedSlice?.id == slice.id ? 1 : 0.35)
         }
         .chartAngleSelection(value: $selectedAngle)
@@ -71,7 +120,7 @@ struct CategoryDonutChart: View {
             GeometryReader { geometry in
                 if let frame = proxy.plotFrame.map({ geometry[$0] }) {
                     VStack(spacing: 2) {
-                        Text(selectedSlice?.category.displayName ?? "Total")
+                        Text(selectedSlice?.label ?? "Total")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -81,7 +130,7 @@ struct CategoryDonutChart: View {
                             showCents: false
                         )
                         Text(selectedSlice == nil ? centerCaption : (total > 0
-                            ? (selectedSlice!.amount / total).doubleValue.percentString + " of spend"
+                            ? (selectedSlice!.amount / total).doubleValue.percentString + " of total"
                             : ""))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
@@ -90,8 +139,44 @@ struct CategoryDonutChart: View {
                 }
             }
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                // Percent labels sit on the ring band itself (between inner
+                // and outer radius) so they never clip the card.
+                if showsPercentLabels, total > 0,
+                   let frame = proxy.plotFrame.map({ geometry[$0] }) {
+                    let center = CGPoint(x: frame.midX, y: frame.midY)
+                    let bandRadius = min(frame.width, frame.height) / 2 * 0.82
+                    let fractions = labelFractions
+                    ForEach(fractions, id: \.id) { item in
+                        let theta = item.midFraction * 2 * .pi
+                        Text(item.percent)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .position(
+                                x: center.x + bandRadius * sin(theta),
+                                y: center.y - bandRadius * cos(theta)
+                            )
+                    }
+                }
+            }
+        }
         .animation(.snappy, value: selectedAngle == nil)
         .sensoryFeedback(.selection, trigger: selectedSlice?.id)
+    }
+
+    /// Mid-angle fraction + percent text per slice, skipping slivers that
+    /// can't fit a label.
+    private var labelFractions: [(id: String, midFraction: Double, percent: String)] {
+        let totalValue = total.doubleValue
+        guard totalValue > 0 else { return [] }
+        var running = 0.0
+        return slices.compactMap { slice in
+            let fraction = slice.amount.doubleValue / totalValue
+            defer { running += fraction }
+            guard fraction >= 0.07 else { return nil }
+            return (slice.id, running + fraction / 2, "\(Int((fraction * 100).rounded()))%")
+        }
     }
 }
 
