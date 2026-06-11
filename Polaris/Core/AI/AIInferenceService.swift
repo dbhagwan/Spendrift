@@ -29,10 +29,56 @@ struct TransactionClassificationRequest: Sendable {
     var userExamples: [UserExample] = []
 }
 
+/// Structured filter produced from a natural-language search ("coffee over
+/// $20 last month"). Guided generation emits this — never free text — so the
+/// result is just a filter the list applies.
+struct TransactionSearchQuery: Sendable, Equatable {
+    var category: SpendingCategory?
+    var merchantContains: String?
+    var minAmount: Decimal?
+    var maxAmount: Decimal?
+    var daysBack: Int?
+    var recurringOnly = false
+
+    var isEmpty: Bool {
+        category == nil && merchantContains == nil && minAmount == nil
+            && maxAmount == nil && daysBack == nil && !recurringOnly
+    }
+
+    /// Chip text describing the parsed filter, e.g. "Dining · ≥ $20 · last 30 days".
+    var summary: String {
+        var parts: [String] = []
+        if let category { parts.append(category.displayName) }
+        if let merchantContains { parts.append("“\(merchantContains)”") }
+        if let minAmount { parts.append("≥ \(minAmount.currency(showCents: false))") }
+        if let maxAmount { parts.append("≤ \(maxAmount.currency(showCents: false))") }
+        if let daysBack { parts.append("last \(daysBack) days") }
+        if recurringOnly { parts.append("recurring") }
+        return parts.joined(separator: " · ")
+    }
+
+    func matches(_ transaction: Transaction) -> Bool {
+        if let category, transaction.category != category { return false }
+        if let merchantContains,
+           !transaction.normalizedDescription.localizedCaseInsensitiveContains(merchantContains),
+           !transaction.merchantName.localizedCaseInsensitiveContains(merchantContains) { return false }
+        if let minAmount, transaction.amount < minAmount { return false }
+        if let maxAmount, transaction.amount > maxAmount { return false }
+        if let daysBack,
+           let cutoff = Calendar.current.date(byAdding: .day, value: -daysBack, to: .now),
+           transaction.date < cutoff { return false }
+        if recurringOnly && !transaction.isRecurring { return false }
+        return true
+    }
+}
+
 protocol AIInferenceService: Sendable {
     func classifyTransaction(
         _ request: TransactionClassificationRequest
     ) async -> (category: SpendingCategory, subcategory: String?, confidence: Double)
+
+    /// Turns a natural-language transaction search into a structured filter.
+    func parseTransactionQuery(_ text: String) async -> TransactionSearchQuery
 
     /// Structured extraction from raw receipt OCR text, used when the
     /// deterministic parser's confidence is low.
@@ -70,6 +116,30 @@ struct MockAIService: AIInferenceService {
         return (.shopping, nil, 0.4)
     }
 
+    func parseTransactionQuery(_ text: String) async -> TransactionSearchQuery {
+        // Keyword heuristics standing in for guided generation.
+        var query = TransactionSearchQuery()
+        let lowered = text.lowercased()
+        for category in SpendingCategory.allCases
+        where lowered.contains(category.displayName.lowercased()) {
+            query.category = category
+            break
+        }
+        if lowered.contains("coffee") || lowered.contains("restaurant") { query.category = .dining }
+        if lowered.contains("recurring") || lowered.contains("subscription") { query.recurringOnly = true }
+        if lowered.contains("last month") || lowered.contains("past month") { query.daysBack = 30 }
+        if lowered.contains("this week") || lowered.contains("last week") { query.daysBack = 7 }
+        if let match = lowered.firstMatch(of: /(over|above|more than) \$?(\d+)/),
+           let amount = Int(match.2) {
+            query.minAmount = Decimal(amount)
+        }
+        if let match = lowered.firstMatch(of: /(under|below|less than) \$?(\d+)/),
+           let amount = Int(match.2) {
+            query.maxAmount = Decimal(amount)
+        }
+        return query
+    }
+
     func extractReceipt(ocrText: String) async -> ReceiptExtraction? {
         // The deterministic ReceiptParser handles mock flows; no fallback needed.
         nil
@@ -94,6 +164,18 @@ struct MockAIService: AIInferenceService {
                 category: momentum.category,
                 evidence: ["This month vs. trailing 3-month average: \(momentum.ratioToTrailingAverage.formatted(.number.precision(.fractionLength(2))))×"],
                 confidence: min(0.95, 0.6 + Double(profile.monthsOfHistory) * 0.05)
+            ))
+        }
+
+        for summary in profile.recentAnomalies.prefix(2) {
+            insights.append(SpendingInsight(
+                generatedAt: now,
+                title: "Unusual charge detected",
+                detail: summary,
+                severity: .warning,
+                category: nil,
+                evidence: [summary],
+                confidence: 0.75
             ))
         }
 

@@ -31,6 +31,10 @@ struct SpendingProfile: Codable, Sendable, Equatable {
     /// Detected behavioral patterns that tend to precede overspend, as short
     /// evidence-backed labels (e.g. "late-night delivery orders").
     var overspendTriggers: [String]
+    /// Recent statistical-outlier charges with the math spelled out, e.g.
+    /// "Shell $84 on Jun 3 — 3.1× your typical transportation charge".
+    /// Computed by `AnomalyDetector`; the narrative layer cites these.
+    var recentAnomalies: [String] = []
 
     struct CategorySpend: Codable, Sendable, Equatable, Identifiable {
         var category: SpendingCategory

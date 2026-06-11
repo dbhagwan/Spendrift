@@ -21,6 +21,9 @@ struct TransactionsView: View {
     @State private var searchText = ""
     @State private var filter = TransactionFilter()
     @State private var showFilters = false
+    /// Structured filter parsed from the search text by the on-device model
+    /// ("coffee over $20 last month" → category/amount/period filter).
+    @State private var aiQuery: TransactionSearchQuery?
 
     private var visible: [Transaction] {
         transactions.filter { transaction in
@@ -29,6 +32,9 @@ struct TransactionsView: View {
             if let accountID = filter.accountID, transaction.accountID != accountID { return false }
             if filter.recurringOnly && !transaction.isRecurring { return false }
             if filter.uncategorizedOnly && transaction.categoryConfidence >= 0.5 { return false }
+            if let aiQuery {
+                return aiQuery.matches(transaction)
+            }
             if !searchText.isEmpty {
                 let haystack = "\(transaction.merchantName) \(transaction.normalizedDescription) \(transaction.category.displayName)".lowercased()
                 if !haystack.contains(searchText.lowercased()) { return false }
@@ -45,6 +51,27 @@ struct TransactionsView: View {
 
     var body: some View {
         List {
+            if let aiQuery, !aiQuery.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
+                    Text(aiQuery.summary)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                    Spacer()
+                    Button {
+                        self.aiQuery = nil
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear AI filter")
+                }
+                .glassListRow()
+            }
             ForEach(groupedByDay, id: \.day) { group in
                 Section(group.day.formatted(date: .abbreviated, time: .omitted)) {
                     ForEach(group.transactions) { transaction in
@@ -82,7 +109,19 @@ struct TransactionsView: View {
                 TransactionDetailView(transaction: transaction)
             }
         }
-        .searchable(text: $searchText, prompt: "Merchant, category…")
+        .searchable(text: $searchText, prompt: "Try “coffee over $20 last month”")
+        // Submitting hands the text to the on-device model, which returns a
+        // structured filter — the list never renders model text.
+        .onSubmit(of: .search) {
+            let text = searchText
+            Task {
+                let parsed = await appEnvironment.ai.parseTransactionQuery(text)
+                aiQuery = parsed.isEmpty ? nil : parsed
+            }
+        }
+        .onChange(of: searchText) {
+            if searchText.isEmpty { aiQuery = nil }
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {

@@ -105,7 +105,9 @@ final class AIPipeline {
         }
 
         // 4–8. Profile → forecast → risk → safe-to-spend.
-        let profile = SpendingProfileEngine.build(transactions: transactions, recurringSeries: series)
+        var profile = SpendingProfileEngine.build(transactions: transactions, recurringSeries: series)
+        // Deterministic outlier detection; the narrative layer cites these.
+        profile.recentAnomalies = AnomalyDetector.detect(in: transactions)
         self.profile = profile
 
         let forecast = ForecastEngine.forecast(
@@ -136,9 +138,24 @@ final class AIPipeline {
             recommendations = narratives.recommendations
         }
 
+        // 9.5 Subscription audit: deterministic price-creep and overlap
+        // findings join the insight feed.
+        let auditFindings = SubscriptionAuditor.audit(series: series, transactions: transactions)
+        if !auditFindings.isEmpty {
+            insights = Array((insights + auditFindings).prefix(6))
+        }
+
         // 10. Net worth snapshot + widget snapshot.
         recordNetWorthSnapshot(accounts: accounts, in: context)
         writeWidgetSnapshot(accounts: accounts, budget: budget, forecast: forecast, in: context, currency: userProfile?.currencyCode ?? "USD")
+
+        // 11. Refresh the Sunday digest with the freshest story (no-op when
+        // the Settings toggle is off).
+        await NotificationScheduler.updateWeeklyDigest(
+            insights: insights,
+            safeToSpendWeek: safeToSpend?.weekAllowance,
+            currencyCode: userProfile?.currencyCode ?? "USD"
+        )
 
         try? context.save()
         lastRunAt = .now

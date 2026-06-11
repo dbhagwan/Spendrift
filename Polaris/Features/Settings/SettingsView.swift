@@ -7,16 +7,16 @@ struct SettingsView: View {
     @Query private var profiles: [UserProfile]
     @Query private var budgets: [Budget]
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage(NotificationScheduler.digestEnabledKey) private var weeklyDigestEnabled = false
 
     private var profile: UserProfile? { profiles.first }
 
     var body: some View {
         @Bindable var appEnvironment = appEnvironment
         Form {
-            // On iPhone, Accounts and Net Worth aren't tabs (5-tab limit).
+            // On iPhone, Accounts isn't a tab (5-tab limit).
             Section {
                 NavigationLink("Accounts") { AccountsView() }
-                NavigationLink("Net Worth") { NetWorthView() }
             }
 
             Section {
@@ -65,6 +65,21 @@ struct SettingsView: View {
                 Text("Safe-to-spend categories")
             } footer: {
                 Text("Toggled-off categories are excluded from the safe-to-spend calculation.")
+            }
+
+            Section {
+                Toggle(isOn: $weeklyDigestEnabled) {
+                    Label("Weekly digest", systemImage: "bell.badge")
+                }
+                // Re-run the pipeline so the digest is scheduled or cleared
+                // immediately rather than on the next sync.
+                .onChange(of: weeklyDigestEnabled) {
+                    Task { await appEnvironment.pipeline.recompute(in: modelContext) }
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text("A Sunday-evening summary of your week in money, written on device from your own numbers.")
             }
 
             Section("AI") {

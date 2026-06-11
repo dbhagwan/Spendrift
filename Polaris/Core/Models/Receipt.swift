@@ -22,6 +22,9 @@ struct ReceiptLineItem: Codable, Hashable, Identifiable, Sendable {
     var name: String
     var quantity: Int
     var price: Decimal
+    /// Per-line category from AI extraction — lets one Costco basket split
+    /// into groceries vs. household vs. clothing instead of a single blob.
+    var category: SpendingCategory? = nil
 }
 
 @Model
@@ -47,6 +50,8 @@ final class Receipt {
     var matchedTransactionID: UUID?
     /// 0...1 — confidence of the receipt-to-transaction match.
     var matchConfidence: Double?
+    /// End of the return window when the receipt states a return policy.
+    var returnBy: Date?
 
     var lineItems: [ReceiptLineItem] {
         get {
@@ -64,6 +69,17 @@ final class Receipt {
     var inferredCategory: SpendingCategory? {
         get { inferredCategoryRaw.flatMap(SpendingCategory.init(rawValue:)) }
         set { inferredCategoryRaw = newValue?.rawValue }
+    }
+
+    /// Line items grouped into category totals — the "basket split" view.
+    /// Only meaningful when AI extraction assigned per-line categories.
+    var categorySplit: [(category: SpendingCategory, total: Decimal)] {
+        let categorized = lineItems.compactMap { item in
+            item.category.map { ($0, item.price * Decimal(max(1, item.quantity))) }
+        }
+        return Dictionary(grouping: categorized, by: \.0)
+            .map { (category: $0.key, total: $0.value.reduce(0) { $0 + $1.1 }) }
+            .sorted { $0.total > $1.total }
     }
 
     init(
@@ -119,6 +135,8 @@ struct ReceiptExtraction: Codable, Sendable {
     var inferredCategory: SpendingCategory?
     var ocrConfidence: Double
     var extractionConfidence: Double
+    /// Days in the printed return policy, when the receipt states one.
+    var returnWindowDays: Int? = nil
 
     func apply(to receipt: Receipt) {
         receipt.merchant = merchant
@@ -131,6 +149,9 @@ struct ReceiptExtraction: Codable, Sendable {
         receipt.inferredCategory = inferredCategory
         receipt.ocrConfidence = ocrConfidence
         receipt.extractionConfidence = extractionConfidence
+        receipt.returnBy = returnWindowDays.map { days in
+            (purchaseDate ?? receipt.capturedAt).addingTimeInterval(86_400.0 * Double(days))
+        }
     }
 }
 

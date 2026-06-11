@@ -33,9 +33,9 @@ enum AppSection: String, CaseIterable, Identifiable {
     }
 
     /// iPhone tab bar — iOS shows at most 5 items before collapsing into
-    /// "More", so Accounts lives in Settings there (and Net Worth inside
-    /// Home/Profile). The iPad sidebar shows everything.
-    static let phoneTabs: [AppSection] = [.home, .transactions, .receipts, .analytics, .budget]
+    /// "More". Net Worth earned a tab; Receipts is one tap away via the Home
+    /// card (and Accounts lives in Settings). The iPad sidebar shows everything.
+    static let phoneTabs: [AppSection] = [.home, .transactions, .netWorth, .analytics, .budget]
     static let padSidebar: [AppSection] = allCases
 }
 
@@ -110,7 +110,7 @@ struct RootView: View {
         case .transactions: TransactionsView()
         case .receipts: ReceiptsView()
         case .analytics: SpendingProfileView()
-        case .netWorth: NetWorthView()
+        case .netWorth: NetWorthView(showsTitle: false)
         case .budget: BudgetView()
         case .accounts: AccountsView()
         case .settings: SettingsView()

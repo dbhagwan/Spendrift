@@ -38,6 +38,15 @@ final class ReceiptCaptureService {
         context.insert(receipt)
         try context.save()
 
+        // Receipt states a return policy → remind before the window closes.
+        if let returnBy = receipt.returnBy {
+            await NotificationScheduler.scheduleReturnReminder(
+                receiptID: receipt.id,
+                merchant: receipt.merchant,
+                returnBy: returnBy
+            )
+        }
+
         // TODO(backend): upload image + extraction to POST /receipts for
         // durable storage and server-side enrichment.
 

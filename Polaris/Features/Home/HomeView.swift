@@ -166,30 +166,43 @@ struct HomeView: View {
         return latest.netWorth - old.netWorth
     }
 
+    /// Tapping opens the full Receipts screen — Receipts gave up its tab to
+    /// Net Worth, so this card is its front door on iPhone.
     private var recentReceiptsCard: some View {
-        Card(title: "Receipts", systemImage: "doc.text.viewfinder") {
-            let recent = Array(receipts.prefix(3))
-            if recent.isEmpty {
-                Text("Scan a receipt and Polaris matches it to the card charge automatically.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(recent) { receipt in
-                    HStack {
-                        Image(systemName: receipt.matchStatus == .unmatched ? "questionmark.circle" : "checkmark.circle.fill")
-                            .foregroundStyle(receipt.matchStatus == .unmatched ? Theme.warning : Theme.positive)
-                        VStack(alignment: .leading) {
-                            Text(receipt.merchant ?? "Unknown merchant").font(.subheadline.weight(.medium))
-                            Text(receipt.matchStatus.displayName).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if let total = receipt.total {
-                            AmountText(amount: total, font: .subheadline)
+        NavigationLink {
+            ReceiptsView()
+        } label: {
+            Card(title: "Receipts", systemImage: "doc.text.viewfinder") {
+                let recent = Array(receipts.prefix(3))
+                if recent.isEmpty {
+                    Text("Scan a receipt and Polaris matches it to the card charge automatically.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(recent) { receipt in
+                        HStack {
+                            Image(systemName: receipt.matchStatus == .unmatched ? "questionmark.circle" : "checkmark.circle.fill")
+                                .foregroundStyle(receipt.matchStatus == .unmatched ? Theme.warning : Theme.positive)
+                            VStack(alignment: .leading) {
+                                Text(receipt.merchant ?? "Unknown merchant").font(.subheadline.weight(.medium))
+                                Text(receipt.matchStatus.displayName).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if let total = receipt.total {
+                                AmountText(amount: total, font: .subheadline)
+                            }
                         }
                     }
                 }
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
+        .buttonStyle(.plain)
     }
 }
 

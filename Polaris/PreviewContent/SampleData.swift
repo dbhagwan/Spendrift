@@ -81,10 +81,12 @@ enum SampleData {
             add(base + 4, 82.40 + Decimal(generator.next(in: -8...12)), "PG&E", .utilities, account: checking, recurring: true)
             add(base + 6, 89.99, "Xfinity", .utilities, account: checking, recurring: true)
             add(base + 9, 132.50, "Geico", .insurance, account: checking, recurring: true)
-            add(base + 11, 15.49, "Netflix", .subscriptions, recurring: true)
+            // Netflix raised its price two months ago (subscription-audit signal,
+            // kept inside the recurring detector's ±15% amount band).
+            add(base + 11, monthsAgo < 2 ? 17.49 : 15.49, "Netflix", .subscriptions, recurring: true)
             add(base + 12, 10.99, "Spotify", .subscriptions, recurring: true)
             add(base + 14, 9.99, "iCloud", .subscriptions, recurring: true)
-            if monthsAgo < 2 { // subscription creep: new services recently
+            if monthsAgo < 3 { // subscription creep: new services recently
                 add(base + 13, 20.00, "ChatGPT Plus", .subscriptions, recurring: true)
                 add(base + 15, 16.99, "HBO Max", .subscriptions, recurring: true)
             }
@@ -120,9 +122,10 @@ enum SampleData {
             add(base + 20, 1_400, "Amex Autopay Payment", .debtPayments, account: checking, essential: true)
         }
 
-        // Recent pending + an anomaly.
+        // Recent pending + anomalies (statistical outliers for their category).
         add(0, 18.40, "Blue Bottle Coffee", .dining, pending: true)
         add(1, 482.00, "Apple Store", .shopping, confidence: 0.55)
+        add(2, 180.00, "Shell", .transportation)
 
         // A low-confidence uncategorized-ish charge for the correction flow.
         add(2, 23.75, "Sq *corner Mart 0114", .miscellaneous, confidence: 0.35)
@@ -165,8 +168,32 @@ enum SampleData {
             inferredCategory: .dining,
             matchStatus: .unmatched
         )
+        // Mixed-basket receipt: per-line AI categories (basket split) plus a
+        // printed return policy (return-window reminder).
+        let basketReceipt = Receipt(
+            imageReference: "sample-receipt-3.jpg",
+            capturedAt: calendar.date(byAdding: .day, value: -2, to: now) ?? now,
+            merchant: "Target",
+            purchaseDate: calendar.date(byAdding: .day, value: -2, to: now),
+            subtotal: 96.45, tax: 8.20, total: 104.65,
+            lineItems: [
+                ReceiptLineItem(name: "Bluetooth Speaker", quantity: 1, price: 39.99, category: .entertainment),
+                ReceiptLineItem(name: "Paper Towels 6pk", quantity: 1, price: 12.49, category: .shopping),
+                ReceiptLineItem(name: "Ibuprofen 200mg", quantity: 1, price: 8.99, category: .health),
+                ReceiptLineItem(name: "Oat Milk", quantity: 2, price: 8.98, category: .groceries),
+                ReceiptLineItem(name: "Throw Blanket", quantity: 1, price: 26.00, category: .shopping),
+            ],
+            ocrText: "TARGET\nRETURNS ACCEPTED WITHIN 90 DAYS\n...",
+            ocrConfidence: 0.93,
+            extractionConfidence: 0.86,
+            inferredCategory: .shopping,
+            matchStatus: .matched,
+            matchConfidence: 0.88
+        )
+        basketReceipt.returnBy = calendar.date(byAdding: .day, value: 88, to: now)
         context.insert(matchedReceipt)
         context.insert(unmatchedReceipt)
+        context.insert(basketReceipt)
 
         // MARK: Budget
 

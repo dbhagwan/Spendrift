@@ -47,8 +47,44 @@ struct ReceiptDetailView: View {
                 }
                 if let total = receipt.total { amountRow("Total", total) }
                 LabeledContent("Category", value: receipt.inferredCategory?.displayName ?? "—")
+                if let returnBy = receipt.returnBy {
+                    LabeledContent("Return by") {
+                        Text(returnBy.formatted(date: .abbreviated, time: .omitted))
+                            .foregroundStyle(returnBy > .now ? Theme.accent : .secondary)
+                    }
+                }
                 LabeledContent("Extraction confidence") {
                     ConfidenceBadge(confidence: receipt.extractionConfidence)
+                }
+            }
+
+            // Basket split: per-line AI categories roll up into a stacked bar
+            // so a single Costco run reads as groceries + household + clothes.
+            let split = receipt.categorySplit
+            if split.count > 1 {
+                Section("Basket split") {
+                    let splitTotal = split.reduce(Decimal(0)) { $0 + $1.total }
+                    GeometryReader { proxy in
+                        HStack(spacing: 2) {
+                            ForEach(split, id: \.category) { slice in
+                                Capsule()
+                                    .fill(slice.category.chartColor)
+                                    .frame(width: max(4, proxy.size.width * (splitTotal > 0 ? (slice.total / splitTotal).doubleValue : 0)))
+                            }
+                        }
+                    }
+                    .frame(height: 8)
+                    .listRowSeparator(.hidden)
+                    ForEach(split, id: \.category) { slice in
+                        HStack(spacing: 6) {
+                            Circle().fill(slice.category.chartColor).frame(width: 8, height: 8)
+                            Text(slice.category.displayName).font(.subheadline)
+                            Spacer()
+                            Text(slice.total.currency())
+                                .font(.subheadline)
+                                .monospacedDigit()
+                        }
+                    }
                 }
             }
 
@@ -58,6 +94,14 @@ struct ReceiptDetailView: View {
                         HStack {
                             Text(item.quantity > 1 ? "\(item.quantity)× \(item.name)" : item.name)
                                 .font(.subheadline)
+                            if let category = item.category {
+                                Text(category.displayName)
+                                    .font(.caption2.weight(.medium))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(category.chartColor.opacity(0.15), in: Capsule())
+                                    .foregroundStyle(category.chartColor)
+                            }
                             Spacer()
                             Text(item.price.currency())
                                 .font(.subheadline)

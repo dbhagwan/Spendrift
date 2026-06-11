@@ -116,6 +116,8 @@ struct FoundationModelsAIService: AIInferenceService {
             "entertainment", "health", "subscriptions", "miscellaneous",
         ]))
         var category: String?
+        @Guide(description: "Return policy window in days, only if explicitly printed on the receipt")
+        var returnWindowDays: Int?
         @Guide(description: "Confidence in this extraction, between 0 and 1")
         var confidence: Double
     }
@@ -125,6 +127,11 @@ struct FoundationModelsAIService: AIInferenceService {
         var name: String
         var quantity: Int
         var price: Double
+        @Guide(description: "Best-fit category id for this specific line item", .anyOf([
+            "groceries", "dining", "shopping", "health", "entertainment",
+            "transportation", "miscellaneous",
+        ]))
+        var category: String?
     }
 
     func extractReceipt(ocrText: String) async -> ReceiptExtraction? {
@@ -154,14 +161,71 @@ struct FoundationModelsAIService: AIInferenceService {
                 tip: result.tip.map { Decimal($0) },
                 total: result.total.map { Decimal($0) },
                 lineItems: result.lineItems.map {
-                    ReceiptLineItem(name: $0.name, quantity: max(1, $0.quantity), price: Decimal($0.price))
+                    ReceiptLineItem(
+                        name: $0.name,
+                        quantity: max(1, $0.quantity),
+                        price: Decimal($0.price),
+                        category: $0.category.flatMap(SpendingCategory.init(rawValue:))
+                    )
                 },
                 inferredCategory: result.category.flatMap(SpendingCategory.init(rawValue:)),
                 ocrConfidence: 0,
-                extractionConfidence: min(max(result.confidence, 0), 1)
+                extractionConfidence: min(max(result.confidence, 0), 1),
+                returnWindowDays: result.returnWindowDays
             )
         } catch {
             return await fallback.extractReceipt(ocrText: ocrText)
+        }
+    }
+
+    // MARK: - Natural-language transaction search
+
+    @Generable
+    struct TransactionQueryFields {
+        @Guide(description: "Category id filter, only if the search clearly names one", .anyOf([
+            "income", "housing", "utilities", "groceries", "dining", "travel",
+            "transportation", "shopping", "entertainment", "health", "insurance",
+            "debtPayments", "transfers", "investments", "fees", "subscriptions",
+            "taxes", "miscellaneous",
+        ]))
+        var category: String?
+        @Guide(description: "Merchant name fragment, only if the search names a specific merchant")
+        var merchant: String?
+        @Guide(description: "Minimum amount in dollars, if stated (e.g. 'over $20' = 20)")
+        var minAmount: Double?
+        @Guide(description: "Maximum amount in dollars, if stated")
+        var maxAmount: Double?
+        @Guide(description: "Days of history, if a period is stated ('last month' = 30, 'this week' = 7)")
+        var daysBack: Int?
+        @Guide(description: "True only if the search asks for recurring or subscription charges")
+        var recurringOnly: Bool
+    }
+
+    func parseTransactionQuery(_ text: String) async -> TransactionSearchQuery {
+        guard isModelAvailable else {
+            return await fallback.parseTransactionQuery(text)
+        }
+        do {
+            let session = LanguageModelSession(instructions: """
+                You convert a natural-language personal-finance transaction \
+                search into a structured filter. Leave every field empty that \
+                the search does not clearly state. 'Coffee' implies the dining \
+                category.
+                """)
+            let result = try await session.respond(
+                to: "Search: \(text)",
+                generating: TransactionQueryFields.self
+            ).content
+            return TransactionSearchQuery(
+                category: result.category.flatMap(SpendingCategory.init(rawValue:)),
+                merchantContains: result.merchant?.isEmpty == false ? result.merchant : nil,
+                minAmount: result.minAmount.map { Decimal($0) },
+                maxAmount: result.maxAmount.map { Decimal($0) },
+                daysBack: result.daysBack,
+                recurringOnly: result.recurringOnly
+            )
+        } catch {
+            return await fallback.parseTransactionQuery(text)
         }
     }
 
@@ -263,6 +327,7 @@ struct FoundationModelsAIService: AIInferenceService {
             Overall budget risk: \(risk.overallRisk.displayName); projected utilization \(Int(risk.projectedBudgetUtilization * 100))%
             Category budgets: \(categoryRisks)
             Overspend triggers: \(profile.overspendTriggers.joined(separator: "; "))
+            Unusual charges: \(profile.recentAnomalies.isEmpty ? "none" : profile.recentAnomalies.prefix(3).joined(separator: "; "))
             """
     }
 }

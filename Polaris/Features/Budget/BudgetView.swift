@@ -21,6 +21,7 @@ struct BudgetView: View {
                         donutCard(risk)
                         categoriesCard(risk)
                     }
+                    whatIfCard
                     safeToSpendLinkCard
                 } else {
                     EmptyStateView(
@@ -116,6 +117,26 @@ struct BudgetView: View {
                 .padding(.vertical, 3)
             }
         }
+    }
+
+    private var whatIfCard: some View {
+        NavigationLink {
+            WhatIfView()
+        } label: {
+            Card(title: "What If…", systemImage: "slider.horizontal.3") {
+                HStack {
+                    Text("Drag spending levers and watch safe-to-spend move in real time.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var safeToSpendLinkCard: some View {

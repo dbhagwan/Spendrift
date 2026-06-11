@@ -3,6 +3,9 @@ import SwiftData
 import SwiftUI
 
 struct NetWorthView: View {
+    /// Tab roots don't repeat the tab's name; pushed presentations keep it.
+    var showsTitle = true
+
     enum Range: String, CaseIterable {
         case oneMonth = "1M"
         case threeMonths = "3M"
@@ -55,7 +58,8 @@ struct NetWorthView: View {
             .padding()
         }
         .background(AppBackground())
-        .navigationTitle("Net Worth")
+        .navigationTitle(showsTitle ? "Net Worth" : "")
+        .navigationBarTitleDisplayMode(showsTitle ? .automatic : .inline)
     }
 
     private var chartCard: some View {
