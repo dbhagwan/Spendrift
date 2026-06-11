@@ -119,23 +119,26 @@ final class ScreenshotTests: XCTestCase {
 
         // ── Net Worth (now a first-class tab) ───────────────────────
         captureTab("Net Worth", screenshot: "13-net-worth\(suffix)")
-        // Allocation donut + per-account rows live below the trend chart.
-        app.swipeUp()
-        sleep(1)
-        snap("13b-net-worth-allocation\(suffix)")
-        let allocationSpin = app.buttons["Spin in 3D"].firstMatch
-        if allocationSpin.exists && allocationSpin.isHittable {
-            allocationSpin.tap()
-            sleep(2)
-            snap("13c-allocation-spin-3d\(suffix)")
-            app.swipeLeft()
+        // Allocation ring swaps in via the top-right toggle.
+        let allocationToggle = app.buttons["Allocation"].firstMatch
+        if allocationToggle.waitForExistence(timeout: 5) {
+            allocationToggle.tap()
             sleep(1)
-            snap("13d-allocation-spin-rotated\(suffix)")
-            app.buttons["Close"].firstMatch.tap()
+            snap("13b-net-worth-allocation\(suffix)")
+            let allocationSpin = app.buttons["Spin in 3D"].firstMatch
+            if allocationSpin.exists && allocationSpin.isHittable {
+                allocationSpin.tap()
+                sleep(2)
+                snap("13c-allocation-spin-3d\(suffix)")
+                app.swipeLeft()
+                sleep(1)
+                snap("13d-allocation-spin-rotated\(suffix)")
+                app.buttons["Close"].firstMatch.tap()
+                sleep(1)
+            }
+            app.buttons["Trend"].firstMatch.tap()
             sleep(1)
         }
-        app.swipeDown() // bring the minimized tab bar back
-        sleep(1)
 
         // ── Spending Profile: donut, momentum, audit insights ───────
         captureTab("Spending Profile", screenshot: "14-spending-profile\(suffix)")

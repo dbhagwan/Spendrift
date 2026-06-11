@@ -50,11 +50,17 @@ struct NetWorthView: View {
         }
     }
 
+    /// What the hero card is showing: the trend line or the allocation ring.
+    enum DisplayMode: String, CaseIterable {
+        case trend, allocation
+    }
+
+    @State private var displayMode: DisplayMode = .trend
+
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.sectionSpacing) {
                 chartCard
-                allocationCard
                 breakdownCard
             }
             .padding()
@@ -86,70 +92,114 @@ struct NetWorthView: View {
     }
 
     /// Robinhood-style allocation: the ring shows each account's share of
-    /// your assets, the rows underneath spell it out.
-    private var allocationCard: some View {
-        Card(title: "Allocation", systemImage: "chart.pie.fill") {
-            let total = allocationAccounts.reduce(Decimal(0)) { $0 + $1.netWorthContribution }
-            if allocationAccounts.isEmpty {
-                Text("Connect accounts to see where your money sits.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                DonutChart(
-                    slices: allocationSlices,
-                    centerCaption: "across accounts",
-                    showsPercentLabels: true
-                )
-                .frame(height: 220)
-                ForEach(allocationAccounts) { account in
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(account.kind.chartColor)
-                            .frame(width: 8, height: 8)
-                        Text("\(account.name) ••\(account.mask)")
-                            .font(.subheadline)
-                            .lineLimit(1)
-                        Spacer()
-                        if total > 0 {
-                            Text((account.netWorthContribution / total).doubleValue.percentString)
-                                .font(.subheadline.weight(.semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(.secondary)
-                        }
-                        AmountText(amount: account.netWorthContribution, font: .subheadline, showCents: false)
-                            .frame(width: 84, alignment: .trailing)
-                    }
-                }
-                HStack {
+    /// your assets, the rows underneath spell it out. Swapped into the hero
+    /// card via the top-right toggle.
+    @ViewBuilder
+    private var allocationContent: some View {
+        let total = allocationAccounts.reduce(Decimal(0)) { $0 + $1.netWorthContribution }
+        if allocationAccounts.isEmpty {
+            Text("Connect accounts to see where your money sits.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        } else {
+            DonutChart(
+                slices: allocationSlices,
+                centerCaption: "across accounts",
+                showsPercentLabels: true
+            )
+            .frame(height: 220)
+            ForEach(allocationAccounts) { account in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(account.kind.chartColor)
+                        .frame(width: 8, height: 8)
+                    Text("\(account.name) ••\(account.mask)")
+                        .font(.subheadline)
+                        .lineLimit(1)
                     Spacer()
-                    Button {
-                        showSpinView = true
-                    } label: {
-                        Label("Spin in 3D", systemImage: "rotate.3d")
-                            .font(.footnote.weight(.medium))
+                    if total > 0 {
+                        Text((account.netWorthContribution / total).doubleValue.percentString)
+                            .font(.subheadline.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.glass)
-                    Spacer()
+                    AmountText(amount: account.netWorthContribution, font: .subheadline, showCents: false)
+                        .frame(width: 84, alignment: .trailing)
                 }
             }
+            HStack {
+                Spacer()
+                Button {
+                    showSpinView = true
+                } label: {
+                    Label("Spin in 3D", systemImage: "rotate.3d")
+                        .font(.footnote.weight(.medium))
+                }
+                .buttonStyle(.glass)
+                Spacer()
+            }
         }
+    }
+
+    /// Top-right toggle between the trend line and the allocation ring.
+    private var modeToggle: some View {
+        HStack(spacing: 2) {
+            modeButton(.trend, icon: "chart.xyaxis.line", label: "Trend")
+            modeButton(.allocation, icon: "chart.pie", label: "Allocation")
+        }
+        .padding(2)
+        .glassEffect(.regular, in: Capsule())
+        .sensoryFeedback(.selection, trigger: displayMode)
+    }
+
+    private func modeButton(_ mode: DisplayMode, icon: String, label: String) -> some View {
+        Button {
+            withAnimation(.snappy) { displayMode = mode }
+        } label: {
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(displayMode == mode ? Theme.accent : .secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    displayMode == mode ? AnyShapeStyle(Theme.accent.opacity(0.15)) : AnyShapeStyle(.clear),
+                    in: Capsule()
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     private var chartCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(selectedSnapshot.map { $0.date.shortDay } ?? "Current")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    AmountText(
-                        amount: selectedSnapshot?.netWorth ?? currentNetWorth,
-                        font: .system(size: 34, weight: .bold),
-                        showCents: false
-                    )
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if displayMode == .trend {
+                            Text(selectedSnapshot.map { $0.date.shortDay } ?? "Current")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            AmountText(
+                                amount: selectedSnapshot?.netWorth ?? currentNetWorth,
+                                font: .system(size: 34, weight: .bold),
+                                showCents: false
+                            )
+                        } else {
+                            Text("Allocation")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(allocationAccounts.count) accounts")
+                                .font(.headline)
+                        }
+                    }
+                    Spacer()
+                    modeToggle
                 }
 
-                if visibleSnapshots.count > 1 {
+                if displayMode == .allocation {
+                    allocationContent
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else if visibleSnapshots.count > 1 {
                     Chart(visibleSnapshots) { snapshot in
                         AreaMark(
                             x: .value("Date", snapshot.date),
@@ -214,10 +264,12 @@ struct NetWorthView: View {
                     )
                 }
 
-                Picker("Range", selection: $range) {
-                    ForEach(Range.allCases, id: \.self) { Text($0.rawValue) }
+                if displayMode == .trend {
+                    Picker("Range", selection: $range) {
+                        ForEach(Range.allCases, id: \.self) { Text($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
             }
         }
     }
