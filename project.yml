@@ -26,7 +26,15 @@ targets:
     type: application
     platform: iOS
     sources:
-      - Polaris
+      - path: Polaris
+        excludes:
+          - "AppIcon.icon"
+          - "AppIcon.icon/**"
+      # Icon Composer document (Liquid Glass icon) — must stay a package,
+      # not loose files, so it rides along as a folder reference.
+      - path: Polaris/AppIcon.icon
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.polaris.app

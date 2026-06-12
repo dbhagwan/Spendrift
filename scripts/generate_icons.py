@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
-"""Generate the minimal Polaris app icons (light, dark, tinted).
+"""Generate the Polaris app icons (light, dark, tinted) + a marketing preview.
 
-Design: a thin upward trend line ending in a four-point sparkle — the AI
-copilot reading your money's trajectory. One accent color, no gradients.
+Design: the North Star — a concave four-point star (astroid) carrying the
+app's mint→ice data gradient, floating over the dark aurora the app itself
+uses, with a small companion star. The same artwork ships two ways:
+
+  * Assets.xcassets/AppIcon.appiconset PNGs (fallback / older toolchains)
+  * Polaris/AppIcon.icon (Icon Composer document — Xcode 26 renders it with
+    real Liquid Glass: specular, translucency, dark/tinted variants)
 
 Usage: python3 scripts/generate_icons.py
-Outputs 1024x1024 PNGs into Polaris/Resources/Assets.xcassets/AppIcon.appiconset/
 """
 
-from PIL import Image, ImageDraw
 import math
 import os
+
+from PIL import Image, ImageDraw, ImageFilter
 
 SIZE = 1024
 SS = 4  # supersample factor for crisp edges
 S = SIZE * SS
 
-MINT = (52, 199, 167, 255)
-INK = (14, 21, 20, 255)          # deep charcoal-teal
-PAPER = (246, 248, 247, 255)     # near-white
-INK_LINE = (24, 33, 32, 255)
+# App palette (Theme.accent + heroGradient endpoint + aurora inks).
+MINT = (74, 230, 184)
+ICE = (89, 160, 248)
+INK_TOP = (9, 14, 18)
+INK_BOTTOM = (20, 33, 40)
+PAPER_TOP = (243, 246, 245)
+PAPER_BOTTOM = (228, 236, 234)
 
 OUT = os.path.join(
     os.path.dirname(__file__), "..",
@@ -27,56 +35,127 @@ OUT = os.path.join(
 )
 
 
-def sparkle(draw, cx, cy, r, color):
-    """Four-point star: two quadratic-ish concave diamonds."""
+def astroid_points(cx, cy, r, exponent=3.4, samples=720):
+    """Concave four-point star: |cos|^a, |sin|^a polar sampling (astroid-like).
+
+    Cusps land on the axes, so the star points N/E/S/W like a compass.
+    """
     pts = []
-    for i in range(8):
-        angle = math.pi / 4 * i - math.pi / 2
-        radius = r if i % 2 == 0 else r * 0.22
-        pts.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
-    draw.polygon(pts, fill=color)
+    for i in range(samples):
+        theta = 2 * math.pi * i / samples
+        c, s = math.cos(theta), math.sin(theta)
+        x = cx + r * math.copysign(abs(c) ** exponent, c)
+        y = cy + r * math.copysign(abs(s) ** exponent, s)
+        pts.append((x, y))
+    return pts
 
 
-def trend(draw, color, width):
-    """Upward polyline across the lower-left two-thirds of the canvas."""
-    pts = [
-        (S * 0.20, S * 0.72),
-        (S * 0.38, S * 0.58),
-        (S * 0.50, S * 0.64),
-        (S * 0.68, S * 0.40),
-    ]
-    draw.line(pts, fill=color, width=width, joint="curve")
-    # round caps
-    r = width / 2
-    for p in (pts[0], pts[-1]):
-        draw.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill=color)
+def vertical_gradient(size, top, bottom):
+    img = Image.new("RGB", (1, size))
+    for y in range(size):
+        t = y / (size - 1)
+        img.putpixel((0, y), tuple(int(a + (b - a) * t) for a, b in zip(top, bottom)))
+    return img.resize((size, size))
 
 
-def make(background, line_color, sparkle_color, name):
-    img = Image.new("RGBA", (S, S), background)
-    draw = ImageDraw.Draw(img)
-    trend(draw, line_color, int(S * 0.045))
-    sparkle(draw, S * 0.72, S * 0.30, S * 0.13, sparkle_color)
-    img = img.resize((SIZE, SIZE), Image.LANCZOS)
-    img.save(os.path.join(OUT, name))
+def diagonal_gradient(size, start, end):
+    """Top-left → bottom-right, matching Theme.heroGradient."""
+    img = Image.new("RGB", (size, size))
+    px = img.load()
+    for y in range(size):
+        for x in range(0, size, 4):  # coarse columns, smoothed by resize later
+            t = (x + y) / (2 * (size - 1))
+            color = tuple(int(a + (b - a) * t) for a, b in zip(start, end))
+            for dx in range(4):
+                if x + dx < size:
+                    px[x + dx, y] = color
+    return img
+
+
+def glow_blob(canvas, center, radius, color, alpha):
+    blob = Image.new("L", canvas.size, 0)
+    draw = ImageDraw.Draw(blob)
+    draw.ellipse(
+        [center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius],
+        fill=alpha,
+    )
+    blob = blob.filter(ImageFilter.GaussianBlur(radius * 0.6))
+    overlay = Image.new("RGB", canvas.size, color)
+    canvas.paste(overlay, (0, 0), blob)
+
+
+def star_mask(size, cx, cy, r, exponent=3.4):
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).polygon(astroid_points(cx, cy, r, exponent), fill=255)
+    return mask
+
+
+def compose_stars(base_rgb, for_dark_background):
+    """Paint glow + gradient stars onto an RGB canvas; returns RGBA 1024."""
+    canvas = base_rgb.convert("RGB")
+
+    main = star_mask(S, S * 0.5, S * 0.52, S * 0.38)
+    companion = star_mask(S, S * 0.745, S * 0.245, S * 0.072)
+    stars = Image.new("L", (S, S), 0)
+    stars.paste(main, (0, 0), main)
+    stars.paste(companion, (0, 0), companion)
+
+    if for_dark_background:
+        halo = stars.filter(ImageFilter.GaussianBlur(S * 0.035)).point(lambda v: v * 0.55)
+        canvas.paste(Image.new("RGB", (S, S), MINT), (0, 0), halo)
+
+    gradient = diagonal_gradient(S, MINT, ICE)
+    canvas.paste(gradient, (0, 0), stars)
+
+    out = canvas.convert("RGBA").resize((SIZE, SIZE), Image.LANCZOS)
+    return out
+
+
+def make_dark(name):
+    base = vertical_gradient(S, INK_TOP, INK_BOTTOM)
+    glow_blob(base, (int(S * 0.18), int(S * 0.92)), int(S * 0.45), MINT, 38)
+    glow_blob(base, (int(S * 0.88), int(S * 0.12)), int(S * 0.40), ICE, 30)
+    compose_stars(base, for_dark_background=True).save(os.path.join(OUT, name))
+    print("wrote", name)
+
+
+def make_light(name):
+    base = vertical_gradient(S, PAPER_TOP, PAPER_BOTTOM)
+    glow_blob(base, (int(S * 0.18), int(S * 0.92)), int(S * 0.45), MINT, 22)
+    glow_blob(base, (int(S * 0.88), int(S * 0.12)), int(S * 0.40), ICE, 16)
+    compose_stars(base, for_dark_background=False).save(os.path.join(OUT, name))
     print("wrote", name)
 
 
 def make_tinted(name):
-    """Grayscale-on-transparent for iOS 18 tinted appearance."""
+    """Grayscale-on-transparent for the tinted appearance."""
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    gray = (180, 180, 180, 255)
-    bright = (240, 240, 240, 255)
-    trend(draw, gray, int(S * 0.045))
-    sparkle(draw, S * 0.72, S * 0.30, S * 0.13, bright)
-    img = img.resize((SIZE, SIZE), Image.LANCZOS)
-    img.save(os.path.join(OUT, name))
+    white = Image.new("RGBA", (S, S), (235, 238, 240, 255))
+    stars = Image.new("L", (S, S), 0)
+    main = star_mask(S, S * 0.5, S * 0.52, S * 0.38)
+    companion = star_mask(S, S * 0.745, S * 0.245, S * 0.072)
+    stars.paste(main, (0, 0), main)
+    stars.paste(companion, (0, 0), companion)
+    img.paste(white, (0, 0), stars)
+    img.resize((SIZE, SIZE), Image.LANCZOS).save(os.path.join(OUT, name))
+    print("wrote", name)
+
+
+def make_preview(name):
+    """Rounded-corner marketing preview (not shipped)."""
+    icon = Image.open(os.path.join(OUT, "icon-dark.png")).convert("RGBA")
+    radius = int(SIZE * 0.2237)  # iOS squircle-ish corner radius
+    mask = Image.new("L", (SIZE, SIZE), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, SIZE, SIZE], radius=radius, fill=255)
+    out = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    out.paste(icon, (0, 0), mask)
+    out.save(name)
     print("wrote", name)
 
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    make(INK, (235, 240, 239, 255), MINT, "icon-dark.png")
-    make(PAPER, INK_LINE, MINT, "icon-light.png")
+    make_dark("icon-dark.png")
+    make_light("icon-light.png")
     make_tinted("icon-tinted.png")
+    make_preview("/tmp/polaris-icon-preview.png")

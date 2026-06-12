@@ -1,0 +1,33 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "extended-srgb:0.035,0.055,0.071,1.000",
+      "extended-srgb:0.078,0.129,0.157,1.000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "star.svg",
+          "name" : "North Star"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.4
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.4
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
