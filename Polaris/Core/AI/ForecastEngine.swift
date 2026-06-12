@@ -31,7 +31,11 @@ enum ForecastEngine {
                     isDiscretionary: $0.isDiscretionary
                 )
             }
-        let upcomingTotal = upcoming.reduce(Decimal(0)) { $0 + $1.amount }
+        // The bills list keeps every real outflow (autopay, contributions),
+        // but only spend-counting categories belong in the spend projection.
+        let upcomingSpendTotal = upcoming
+            .filter { !$0.category.isExcludedFromSpend }
+            .reduce(Decimal(0)) { $0 + $1.amount }
 
         // Variable run-rate projection, blended with historical average when
         // the month is young (early days are noisy). Anomalies stay in
@@ -47,7 +51,7 @@ enum ForecastEngine {
         let blendedDaily = variableDailyPace * paceWeight + historicalVariableDaily * (1 - paceWeight)
         let projectedVariableRemaining = Decimal(blendedDaily * Double(remainingDays))
 
-        let projectedTotal = spentToDate + upcomingTotal + projectedVariableRemaining
+        let projectedTotal = spentToDate + upcomingSpendTotal + projectedVariableRemaining
         let essentialShare = Decimal(profile.essentialShare)
         let projectedEssential = projectedTotal * essentialShare
 
@@ -87,10 +91,18 @@ enum ForecastEngine {
         for budgetCategory in budget.categories {
             let categoryTxns = periodTxns.filter { $0.category == budgetCategory.category }
             let spent = categoryTxns.reduce(Decimal(0)) { $0 + $1.amount }
-            // Pace extended to period end — but anomalies count once, not
-            // per remaining day.
+            // Only variable spend extrapolates to period end. Anomalies and
+            // recurring charges count once (rent paid on the 1st isn't a
+            // daily pace), plus the category's known upcoming recurring.
             let anomalous = categoryTxns.filter(\.isAnomaly).reduce(Decimal(0)) { $0 + $1.amount }
-            let projected = Decimal((spent - anomalous).doubleValue / elapsedFraction) + anomalous
+            let recurringSpent = categoryTxns.filter { $0.isRecurring && !$0.isAnomaly }
+                .reduce(Decimal(0)) { $0 + $1.amount }
+            let variable = spent - anomalous - recurringSpent
+            let upcomingInCategory = forecast.upcomingRecurringCharges
+                .filter { $0.category == budgetCategory.category }
+                .reduce(Decimal(0)) { $0 + $1.amount }
+            let projected = anomalous + recurringSpent + upcomingInCategory
+                + Decimal(max(0, variable.doubleValue) / elapsedFraction)
             let utilization = budgetCategory.monthlyLimit > 0
                 ? (projected / budgetCategory.monthlyLimit).doubleValue
                 : 0

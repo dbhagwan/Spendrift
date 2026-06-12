@@ -54,8 +54,15 @@ enum SafeToSpendEngine {
             .reduce(Decimal(0)) { $0 + $1.amount }
         let remainingDiscretionary = max(0, discretionaryBudget - discretionarySpent)
 
+        // Transfers/investments are real outflows (the cash-flow calendar
+        // shows them) but they never count as spend, so they can't reserve
+        // spending allowance.
         let upcomingDiscretionary = forecast.upcomingRecurringCharges
-            .filter { $0.isDiscretionary && !excludedCategories.contains($0.category) }
+            .filter {
+                $0.isDiscretionary
+                    && !excludedCategories.contains($0.category)
+                    && !$0.category.isExcludedFromSpend
+            }
             .reduce(Decimal(0)) { $0 + $1.amount }
 
         // Essential spend the budget hasn't explicitly reserved for.
