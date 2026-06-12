@@ -100,7 +100,8 @@ jobs:
             -derivedDataPath build \
             -resultBundlePath TestResults.xcresult \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 600
+            -default-test-execution-time-allowance 900 \
+            -maximum-test-execution-time-allowance 1500
 
       - name: Finalize walkthrough video
         if: always()

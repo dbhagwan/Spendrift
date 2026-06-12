@@ -103,6 +103,11 @@ final class ScreenshotTests: XCTestCase {
             sleep(1)
         }
 
+        // ── Feature screens reached from Home cards ─────────────────
+        openHomeCard(["GOALS", "Goals"], snapshot: "08b-goals\(suffix)")
+        openHomeCard(["CASH FLOW", "Cash Flow"], snapshot: "08c-cash-flow\(suffix)")
+        openMonthlyStory(suffix: suffix)
+
         // ── Transactions: list + AI natural-language search ─────────
         captureTab("Transactions", screenshot: "11-transactions\(suffix)")
         let searchField = app.searchFields.firstMatch
@@ -140,6 +145,22 @@ final class ScreenshotTests: XCTestCase {
             app.buttons["Trend"].firstMatch.tap()
             sleep(1)
         }
+        // Breakdown rows sit below the hero card; the brokerage pushes
+        // its holdings (allocation ring + positions).
+        app.swipeUp()
+        sleep(1)
+        let brokerageRow = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS 'Brokerage'"))
+            .firstMatch
+        if brokerageRow.exists && brokerageRow.isHittable {
+            brokerageRow.tap()
+            sleep(2)
+            snap("13e-holdings\(suffix)")
+            app.navigationBars.buttons.firstMatch.tap()
+            sleep(1)
+        }
+        app.swipeDown() // restore the minimized tab bar
+        sleep(1)
 
         // ── Spending Profile: donut, momentum, audit insights ───────
         captureTab("Spending Profile", screenshot: "14-spending-profile\(suffix)")
@@ -188,7 +209,62 @@ final class ScreenshotTests: XCTestCase {
         snap("18-accounts")
         app.navigationBars.buttons.firstMatch.tap() // back to Settings
         sleep(1)
+
+        // Rules editor lives in the AI section, below the fold.
+        app.swipeUp()
+        sleep(1)
+        let rules = app.buttons["Categorization rules"].firstMatch
+        if rules.exists && rules.isHittable {
+            rules.tap()
+            sleep(1)
+            snap("19-rules")
+            app.navigationBars.buttons.firstMatch.tap()
+            sleep(1)
+        }
         app.navigationBars.buttons.firstMatch.tap() // back to Home
+        sleep(1)
+    }
+
+    /// Scrolls Home until the named card is hittable, taps it, snaps the
+    /// pushed screen, and restores Home's scroll position.
+    private func openHomeCard(_ labels: [String], snapshot: String) {
+        captureTab("Home", screenshot: nil)
+        for _ in 0..<6 {
+            if let card = firstExisting(labels, timeout: 1), card.isHittable {
+                card.tap()
+                sleep(2)
+                snap(snapshot)
+                app.navigationBars.buttons.firstMatch.tap()
+                sleep(1)
+                break
+            }
+            app.swipeUp()
+        }
+        for _ in 0..<3 { app.swipeDown() }
+        sleep(1)
+    }
+
+    /// The story card opens a full-screen pager; capture two pages.
+    private func openMonthlyStory(suffix: String) {
+        captureTab("Home", screenshot: nil)
+        let storyCard = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] 'story'"))
+            .firstMatch
+        for _ in 0..<6 {
+            if storyCard.exists && storyCard.isHittable {
+                storyCard.tap()
+                sleep(2)
+                snap("08d-monthly-story\(suffix)")
+                app.swipeLeft()
+                sleep(1)
+                snap("08e-monthly-story-2\(suffix)")
+                app.buttons["Close"].firstMatch.tap()
+                sleep(1)
+                break
+            }
+            app.swipeUp()
+        }
+        for _ in 0..<3 { app.swipeDown() }
         sleep(1)
     }
 

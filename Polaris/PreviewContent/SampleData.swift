@@ -97,7 +97,7 @@ enum SampleData {
             }
 
             // Dining: accelerating in recent months (momentum signal).
-            let diningCount = monthsAgo < 2 ? 14 : 9
+            let diningCount = monthsAgo < 2 ? 12 : 9
             let diningSpots = ["Souvla", "Blue Bottle Coffee", "Doordash", "Tartine Bakery", "El Farolito", "Sweetgreen"]
             for i in 0..<diningCount {
                 add(base + (i * 2) % 28, 14 + Decimal(generator.next(in: 0...48)), diningSpots[i % diningSpots.count], .dining)
@@ -118,8 +118,9 @@ enum SampleData {
             add(base + 5, 500, "Transfer to Savings", .transfers, account: checking, essential: false)
             add(base + 18, 400, "Fidelity Contribution", .investments, account: checking, recurring: true, essential: false)
 
-            // Card payment pair (transfer detection exercise).
-            add(base + 20, 1_400, "Amex Autopay Payment", .debtPayments, account: checking, essential: true)
+            // Card payment pair (transfer detection exercise) — a transfer
+            // between own accounts, so it never counts as spend.
+            add(base + 20, 1_400, "Amex Autopay Payment", .transfers, account: checking, essential: false)
         }
 
         // Recent pending + anomalies (statistical outliers for their category).
@@ -224,13 +225,13 @@ enum SampleData {
             emoji: "🗾",
             targetAmount: 3_000,
             fundedAmount: 1_240,
-            targetDate: calendar.date(byAdding: .day, value: 120, to: now)
+            targetDate: calendar.date(byAdding: .day, value: 180, to: now)
         ))
         context.insert(SavingsGoal(
             name: "Emergency fund",
             emoji: "🛟",
             targetAmount: 10_000,
-            fundedAmount: 7_800
+            fundedAmount: 9_200
         ))
 
         let holdings: [(String, String, Decimal, Decimal, Decimal)] = [
@@ -254,14 +255,14 @@ enum SampleData {
 
         // MARK: Budget
 
-        let budget = Budget(monthlyTotal: 3_600)
+        let budget = Budget(monthlyTotal: 4_200)
         budget.categories = [
-            BudgetCategory(category: .groceries, monthlyLimit: 480, isAIRecommended: true),
-            BudgetCategory(category: .dining, monthlyLimit: 420, isAIRecommended: true),
-            BudgetCategory(category: .shopping, monthlyLimit: 300, isAIRecommended: true),
-            BudgetCategory(category: .transportation, monthlyLimit: 220, isAIRecommended: true),
-            BudgetCategory(category: .entertainment, monthlyLimit: 90, isAIRecommended: true),
-            BudgetCategory(category: .subscriptions, monthlyLimit: 80),
+            BudgetCategory(category: .groceries, monthlyLimit: 560, isAIRecommended: true),
+            BudgetCategory(category: .dining, monthlyLimit: 620, isAIRecommended: true),
+            BudgetCategory(category: .shopping, monthlyLimit: 380, isAIRecommended: true),
+            BudgetCategory(category: .transportation, monthlyLimit: 260, isAIRecommended: true),
+            BudgetCategory(category: .entertainment, monthlyLimit: 130, isAIRecommended: true),
+            BudgetCategory(category: .subscriptions, monthlyLimit: 100),
         ]
         context.insert(budget)
 
