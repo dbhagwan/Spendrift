@@ -18,6 +18,12 @@ struct OnboardingFlowView: View {
     @State private var syncProgressText = "Connecting…"
     @State private var monthlyBudget: Double = 3500
 
+    // Welcome choreography: line draws → star ignites → copy fades in.
+    @State private var lineProgress: CGFloat = 0
+    @State private var showStar = false
+    @State private var showWelcomeContent = false
+    @Namespace private var starNamespace
+
     var body: some View {
         VStack(spacing: 0) {
             content
@@ -26,7 +32,7 @@ struct OnboardingFlowView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(AppBackground())
-        .animation(.snappy, value: step)
+        .animation(.spring(duration: 0.65, bounce: 0.18), value: step)
     }
 
     @ViewBuilder
@@ -42,25 +48,75 @@ struct OnboardingFlowView: View {
         }
     }
 
+    /// The opening scene: a market line climbs out of the lower-left and
+    /// ignites the North Star where it lands; the name and copy follow.
     private var welcome: some View {
         VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "sparkles")
-                .font(.system(size: 56, weight: .light))
-                .foregroundStyle(Theme.accent)
-            Text("Polaris").font(.largeTitle.bold())
-            Text("An AI copilot for your money. Link your accounts once — Polaris learns your spending, predicts what's ahead, and tells you exactly what's safe to spend today.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Spacer()
-            primaryButton("Get Started") { step = .signIn }
+            GeometryReader { geometry in
+                let size = geometry.size
+                let end = CGPoint(
+                    x: TrendToStarShape.endPoint.x * size.width,
+                    y: TrendToStarShape.endPoint.y * size.height
+                )
+                ZStack(alignment: .topLeading) {
+                    TrendToStarShape()
+                        .trim(from: 0, to: lineProgress)
+                        .stroke(
+                            Theme.heroGradient,
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                        )
+                        .shadow(color: Theme.accent.opacity(0.55), radius: 10)
+
+                    // Placed by layout (not .position) so the matched frame
+                    // is the 96pt star itself, making the morph to the
+                    // sign-in emblem track the real shape.
+                    NorthStarShape()
+                        .fill(Theme.heroGradient)
+                        .frame(width: 96, height: 96)
+                        .shadow(color: Theme.accent.opacity(0.75), radius: showStar ? 26 : 0)
+                        .scaleEffect(showStar ? 1 : 0.1)
+                        .opacity(showStar ? 1 : 0)
+                        .matchedGeometryEffect(id: "northStar", in: starNamespace)
+                        .padding(.leading, max(0, end.x - 48))
+                        .padding(.top, max(0, end.y - 48))
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .accessibilityHidden(true)
+
+            Group {
+                Text("Polaris").font(.largeTitle.bold())
+                Text("An AI copilot for your money. Link your accounts once — Polaris learns your spending, predicts what's ahead, and tells you exactly what's safe to spend today.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                primaryButton("Get Started") { step = .signIn }
+                    .padding(.top, 8)
+            }
+            .opacity(showWelcomeContent ? 1 : 0)
+            .offset(y: showWelcomeContent ? 0 : 18)
+        }
+        .task {
+            guard lineProgress == 0 else { return }
+            withAnimation(.easeInOut(duration: 1.6)) { lineProgress = 1 }
+            try? await Task.sleep(for: .milliseconds(1_400))
+            withAnimation(.spring(duration: 0.55, bounce: 0.45)) { showStar = true }
+            try? await Task.sleep(for: .milliseconds(450))
+            withAnimation(.easeOut(duration: 0.5)) { showWelcomeContent = true }
         }
     }
 
     private var signIn: some View {
         VStack(spacing: 16) {
             Spacer()
+            // The welcome star sails here — one continuous object across
+            // the transition (matched geometry), now a quiet emblem.
+            NorthStarShape()
+                .fill(Theme.heroGradient)
+                .frame(width: 44, height: 44)
+                .shadow(color: Theme.accent.opacity(0.5), radius: 12)
+                .matchedGeometryEffect(id: "northStar", in: starNamespace)
+                .padding(.bottom, 4)
             header("Sign in", "Your data syncs securely across iPhone and iPad.")
             SignInWithAppleButton(.signIn) { request in
                 request.requestedScopes = [.fullName]
