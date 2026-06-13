@@ -17,3 +17,6 @@ Backend/.env
 
 # Python
 __pycache__/
+
+# CI-generated watch app icon (copied from the iOS icon at build time)
+PolarisWatch/Assets.xcassets/AppIcon.appiconset/watch-icon.png
