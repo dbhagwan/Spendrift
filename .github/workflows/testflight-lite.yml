@@ -1,0 +1,98 @@
+name: TestFlight (lite — no App Group / iCloud)
+
+# Fallback path: strips the entitlements that require website-linked
+# identifiers (App Groups, iCloud containers, push) so automatic signing
+# always succeeds. Produces a fully usable app — every feature works
+# except live widgets, cross-device iCloud sync, and Live Activity, which
+# degrade gracefully at runtime. Use this to get a build on-device while
+# the App ID's App Group / iCloud container associations are sorted out;
+# then switch back to the full `testflight.yml`.
+on:
+  workflow_dispatch:
+
+jobs:
+  testflight:
+    name: Archive (lite entitlements) + upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Strip website-linked entitlements (App Group, iCloud, push)
+        run: |
+          for plist in Polaris/Polaris.entitlements PolarisWidgets/PolarisWidgets.entitlements; do
+            for key in \
+              "com.apple.security.application-groups" \
+              "com.apple.developer.icloud-services" \
+              "com.apple.developer.icloud-container-identifiers" \
+              "com.apple.developer.ubiquity-kvstore-identifier" \
+              "aps-environment"; do
+              plutil -remove "$key" "$plist" 2>/dev/null || true
+            done
+            echo "--- $plist after strip:"; plutil -p "$plist"
+          done
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_B64: ${{ secrets.ASC_KEY_B64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_KEY_B64" | base64 --decode > "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Archive (cloud-managed signing)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Polaris.xcodeproj \
+            -scheme Polaris \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Polaris.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/Polaris.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
