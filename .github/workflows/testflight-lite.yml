@@ -1,12 +1,12 @@
 name: TestFlight (lite — no App Group / iCloud)
 
-# Fallback path: strips the entitlements that require website-linked
-# identifiers (App Groups, iCloud containers, push) so automatic signing
-# always succeeds. Produces a fully usable app — every feature works
-# except live widgets, cross-device iCloud sync, and Live Activity, which
-# degrade gracefully at runtime. Use this to get a build on-device while
-# the App ID's App Group / iCloud container associations are sorted out;
-# then switch back to the full `testflight.yml`.
+# Fallback path: replaces the entitlements with minimal plists so automatic
+# signing always succeeds, with zero dependency on website-linked App Group
+# / iCloud container identifiers. Produces a fully usable app — every feature
+# works except live widgets, cross-device iCloud sync, and Live Activity,
+# which degrade gracefully at runtime. Use this to get a build on-device
+# while the App ID's App Group / iCloud associations are sorted out; then
+# switch back to the full `testflight.yml`.
 on:
   workflow_dispatch:
 
@@ -29,19 +29,30 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Strip website-linked entitlements (App Group, iCloud, push)
+      - name: Write minimal entitlements (drop App Group / iCloud / push)
         run: |
-          for plist in Polaris/Polaris.entitlements PolarisWidgets/PolarisWidgets.entitlements; do
-            for key in \
-              "com.apple.security.application-groups" \
-              "com.apple.developer.icloud-services" \
-              "com.apple.developer.icloud-container-identifiers" \
-              "com.apple.developer.ubiquity-kvstore-identifier" \
-              "aps-environment"; do
-              plutil -remove "$key" "$plist" 2>/dev/null || true
-            done
-            echo "--- $plist after strip:"; plutil -p "$plist"
-          done
+          # Overwrite, rather than key-surgery: plutil treats dotted keys as
+          # nested paths, so -remove can't target top-level keys like
+          # com.apple.security.application-groups. A fresh plist is bulletproof.
+          cat > Polaris/Polaris.entitlements <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.developer.applesignin</key>
+            <array><string>Default</string></array>
+          </dict>
+          </plist>
+          PLIST
+          cat > PolarisWidgets/PolarisWidgets.entitlements <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict/>
+          </plist>
+          PLIST
+          echo "--- Polaris.entitlements"; plutil -p Polaris/Polaris.entitlements
+          echo "--- PolarisWidgets.entitlements"; plutil -p PolarisWidgets/PolarisWidgets.entitlements
 
       - name: Install App Store Connect API key
         env:
