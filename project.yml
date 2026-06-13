@@ -91,6 +91,7 @@ targets:
     info:
       path: PolarisWidgets/Info.plist
       properties:
+        CFBundleDisplayName: Polaris Widgets
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
@@ -117,6 +118,7 @@ targets:
         INFOPLIST_KEY_WKApplication: YES
         INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.dbhagwan.polaris
         INFOPLIST_KEY_CFBundleDisplayName: Polaris
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   PolarisUITests:
     type: bundle.ui-testing
